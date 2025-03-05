@@ -167,6 +167,10 @@ float Volume::biLinearInterpolate(const glm::vec2& xyCoord, int z) const
     int y0 = static_cast<int>(std::floor(xyCoord.y));
     int y1 = y0 + 1;
 
+    // Check if the coordinates are within the volume
+    if (x0 < 0 || x1 >= m_dim.x || y0 < 0 || y1 >= m_dim.y || z < 0 || z >= m_dim.z)
+        return 0.f;
+
     // Compute the interpolation factors
     float fx = xyCoord.x - x0;
     float fy = xyCoord.y - y0;
