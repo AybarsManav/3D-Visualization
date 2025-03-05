@@ -1,0 +1,16 @@
+{
+  "name": "volvis",
+  "version": "0.0.1",
+  "dependencies": [
+    "glfw3",
+    "glew",
+    "glm",
+    "ms-gsl",
+    "imgui",
+    "nativefiledialog",
+    "fmt",
+    "catch2",
+    "stb"
+  ],
+  "builtin-baseline": "b295670e4bab14debe88d92cd5364b21ce26232c"
+}
