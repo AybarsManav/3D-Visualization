@@ -46,7 +46,7 @@ static std::vector<GradientVoxel> computeGradientVolume(const Volume& volume)
 
                 const glm::vec3 v { gx, gy, gz };
                 const size_t index = static_cast<size_t>(x + dim.x * (y + dim.y * z));
-                out[index] = GradientVoxel { v, glm::length(v) }; // Direction is not normalized
+                out[index] = GradientVoxel { v, glm::length(v) };
             }
         }
     }
@@ -115,7 +115,36 @@ GradientVoxel GradientVolume::getGradientNearestNeighbor(const glm::vec3& coord)
 // Use the linearInterpolate function that you implemented below.
 GradientVoxel GradientVolume::getGradientLinearInterpolate(const glm::vec3& coord) const
 {
-    return GradientVoxel {};
+    if (glm::any(glm::lessThan(coord, glm::vec3(0))) || glm::any(glm::greaterThanEqual(coord + 1.0f, glm::vec3(m_dim))))
+        return { glm::vec3(0.0f), 0.0f };
+
+    // get the coordinates of the lower corner
+    int x0 = static_cast<int>(std::floor(coord.x));
+    int y0 = static_cast<int>(std::floor(coord.y));
+    int z0 = static_cast<int>(std::floorf(coord.z));
+
+    // get the coordinates of the upper corner
+    int x1 = x0 + 1;
+    int y1 = y0 + 1;
+    int z1 = z0 + 1;
+
+    // get distances to lower corner
+    float xd = coord.x - static_cast<float>(x0);
+    float yd = coord.y - static_cast<float>(y0);
+    float zd = coord.z - static_cast<float>(z0);
+
+    // for all 4 edges parallel to the x-axis, linearly interpolate between its vertices
+    GradientVoxel c00 = linearInterpolate(getGradient(x0, y0, z0), getGradient(x1, y0, z0), xd);
+    GradientVoxel c01 = linearInterpolate(getGradient(x0, y0, z1), getGradient(x1, y0, z1), xd);
+    GradientVoxel c10 = linearInterpolate(getGradient(x0, y1, z0), getGradient(x1, y1, z0), xd);
+    GradientVoxel c11 = linearInterpolate(getGradient(x0, y1, z1), getGradient(x1, y1, z1), xd);
+
+    // for the 2 remaining edges parallel to the y-axis, linearly interpolate between its vertices
+    GradientVoxel c0 = linearInterpolate(c00, c10, yd);
+    GradientVoxel c1 = linearInterpolate(c01, c11, yd);
+
+    // finally return linear interpolation between the remaining two points
+    return linearInterpolate(c0, c1, zd);
 }
 
 // ======= TODO : IMPLEMENT ========
@@ -123,10 +152,9 @@ GradientVoxel GradientVolume::getGradientLinearInterpolate(const glm::vec3& coor
 // At t=0, linearInterpolate should return g0 and at t=1 it returns g1.
 GradientVoxel GradientVolume::linearInterpolate(const GradientVoxel& g0, const GradientVoxel& g1, float factor)
 {
-    GradientVoxel interpolated_g;
-    interpolated_g.dir = (1 - factor) * g0.dir + factor * g1.dir;
-    interpolated_g.magnitude = glm::length(interpolated_g.dir);
-    return interpolated_g;
+    glm::vec3 direction = g0.dir * (1.0f - factor) + g1.dir * factor;
+
+    return GradientVoxel { glm::normalize(direction), glm::length(direction) };
 }
 
 // This function returns a gradientVoxel without using interpolation

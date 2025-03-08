@@ -83,12 +83,6 @@ float Volume::getVoxel(int x, int y, int z) const
     return static_cast<float>(m_data[i]);
 }
 
-float Volume::getVoxel(const glm::ivec3& pos) const
-{
-    const size_t i = size_t(pos.x + m_dim.x * (pos.y + m_dim.y * pos.z));
-    return static_cast<float>(m_data[i]);
-}
-
 // This function returns a value based on the current interpolation mode
 float Volume::getSampleInterpolate(const glm::vec3& coord) const
 {
@@ -130,23 +124,23 @@ float Volume::getSampleNearestNeighbourInterpolation(const glm::vec3& coord) con
 // This function returns the trilinear interpolated value at the continuous 3D position given by coord.
 float Volume::getSampleTriLinearInterpolation(const glm::vec3& coord) const
 {
-    if (glm::any(glm::lessThan(coord + 0.5f, glm::vec3(0))) || glm::any(glm::greaterThanEqual(coord + 0.5f, glm::vec3(m_dim))))
+    if (glm::any(glm::lessThan(coord, glm::vec3(0))) || glm::any(glm::greaterThanEqual(coord + 1.0f, glm::vec3(m_dim)))) {
         return 0.0f;
-    if (glm::any(glm::lessThan(coord - 0.5f, glm::vec3(0))) || glm::any(glm::greaterThanEqual(coord - 0.5f, glm::vec3(m_dim))))
-        return 0.0f;
+    }
 
-    // Get the base corner (top-left-front considering x is towards right, y is towards down and z is towards in the page)
-    glm::ivec3 p000 = glm::floor(coord);
+    // For tri-linear interpolation, we need to basically do the same as bi-linear interpolation
+    // Given the continuous xy coordinate we need to compute that for the floor and ceil of z and
+    // interpolate those two results
+    const int floor_z = static_cast<int>(floorf(coord.z));
+    const int ceil_z = floor_z + 1;
+    const glm::vec2 xy_coord = glm::vec2(coord.x, coord.y);
+    const float z_factor = coord.z - floor_z;
 
-    // Bilinearly interpolate planes front and back
-    float c0 = biLinearInterpolate(glm::vec2(coord.x, coord.y), p000.z);
-    float c1 = biLinearInterpolate(glm::vec2(coord.x, coord.y), p000.z + 1);
+    const float interpolated_floor = this->biLinearInterpolate(xy_coord, floor_z);
+    const float interpolated_ceil = this->biLinearInterpolate(xy_coord, ceil_z);
 
-    // Linearly interpolate on z axis
-    float factor_z = coord.z - p000.z;
-    float c = linearInterpolate(c0, c1, factor_z);
-
-    return c;
+    const float interpolated_result = Volume::linearInterpolate(interpolated_floor, interpolated_ceil, z_factor);
+    return interpolated_result;
 }
 
 // This function linearly interpolates the value at X using incoming values g0 and g1 given a factor (equal to the positon of x in 1D)
@@ -155,40 +149,34 @@ float Volume::getSampleTriLinearInterpolation(const glm::vec3& coord) const
 //   factor
 float Volume::linearInterpolate(float g0, float g1, float factor)
 {
-    return (1 - factor) * g0 + factor * g1;
+    return std::lerp(g0, g1, factor);
 }
 
 // This function bi-linearly interpolates the value at the given continuous 2D XY coordinate for a fixed integer z coordinate.
 float Volume::biLinearInterpolate(const glm::vec2& xyCoord, int z) const
 {
-    // Get the integer coordinates surrounding the xy point
-    int x0 = static_cast<int>(std::floor(xyCoord.x));
-    int x1 = x0 + 1;
-    int y0 = static_cast<int>(std::floor(xyCoord.y));
-    int y1 = y0 + 1;
+    auto z_offset = z * this->m_dim.z;
+    // To bi-linearly interpolate we need to get the interpolated value of min_y, min_x and min_y and max_x
+    // This value gets interpolated with the interpolated value of max_y, min_x and max_y, max_x
+    const int min_y = static_cast<int>(floorf(xyCoord.y));
+    const int max_y = min_y + 1;
+    const int min_x = static_cast<int>(floorf(xyCoord.x));
+    const int max_x = min_x + 1;
 
-    // Check if the coordinates are within the volume
-    if (x0 < 0 || x1 >= m_dim.x || y0 < 0 || y1 >= m_dim.y || z < 0 || z >= m_dim.z)
-        return 0.f;
+    const float x_factor = xyCoord.x - min_x;
+    const float y_factor = xyCoord.y - min_y;
 
-    // Compute the interpolation factors
-    float fx = xyCoord.x - x0;
-    float fy = xyCoord.y - y0;
+    const float a = this->getVoxel(min_x, min_y, z);
+    const float b = this->getVoxel(max_x, min_y, z);
+    const float c = this->getVoxel(min_x, max_y, z);
+    const float d = this->getVoxel(max_x, max_y, z);
 
-    // Get the values at the four surrounding grid points
-    float g00 = getVoxel(x0, y0, z); // Top-left
-    float g10 = getVoxel(x1, y0, z); // Top-right
-    float g01 = getVoxel(x0, y1, z); // Bottom-left
-    float g11 = getVoxel(x1, y1, z); // Bottom-right
+    const float interpolate_ab = Volume::linearInterpolate(a, b, x_factor);
+    const float interpolate_cd = Volume::linearInterpolate(c, d, x_factor);
 
-    // Interpolate along x-axis
-    float gx0 = linearInterpolate(g00, g10, fx); // Interpolated at top row
-    float gx1 = linearInterpolate(g01, g11, fx); // Interpolated at bottom row
+    const float interpolated_result = Volume::linearInterpolate(interpolate_ab, interpolate_cd, y_factor);
 
-    // Interpolate along y-axis (vertical interpolation)
-    float gxy = linearInterpolate(gx0, gx1, fy);
-
-    return gxy;
+    return interpolated_result;
 }
 
 
