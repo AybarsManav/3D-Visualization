@@ -155,7 +155,6 @@ float Volume::linearInterpolate(float g0, float g1, float factor)
 // This function bi-linearly interpolates the value at the given continuous 2D XY coordinate for a fixed integer z coordinate.
 float Volume::biLinearInterpolate(const glm::vec2& xyCoord, int z) const
 {
-    auto z_offset = z * this->m_dim.z;
     // To bi-linearly interpolate we need to get the interpolated value of min_y, min_x and min_y and max_x
     // This value gets interpolated with the interpolated value of max_y, min_x and max_y, max_x
     const int min_y = static_cast<int>(floorf(xyCoord.y));

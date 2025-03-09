@@ -168,9 +168,11 @@ glm::vec4 Renderer::traceRayISO(const Ray& ray, float stepSize) const
         // if the value is greater or equal than the isoValue, stop
         if (val >= m_config.isoValue) {
 
-            // find best time step t
-            float accurateT = bisectionAccuracy(ray, t - stepSize, t, m_config.isoValue);
-            samplePos = ray.origin + accurateT * ray.direction;
+            if (m_config.bisection) {
+                // find best time step t for more accurate sample position of the iso-value
+                float accurateT = bisectionAccuracy(ray, t - stepSize, t, m_config.isoValue);
+                samplePos = ray.origin + accurateT * ray.direction;
+            }
 
             if (m_config.volumeShading) {
 
