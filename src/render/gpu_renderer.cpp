@@ -184,6 +184,13 @@ GPURenderer::GPURenderer(
 // Store the values in m_opacitySumTable 
 void GPURenderer::updateOpacitySumTable()
 {
+    const std::array<glm::vec4, 256>& tf = m_renderConfig.tfColorMap;
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < tf.size(); ++i) {
+        sum += tf[i].a; // Accumulate opacity
+        m_opacitySumTable[i] = sum;
+    }
 }
 
 // ======= TODO: IMPLEMENT ========
@@ -195,14 +202,23 @@ void GPURenderer::updateOpacitySumTable()
 // You can access the volume using m_pVolume like in the CPU renderer
 void GPURenderer::updateBlockingMinMaxTable()
 {
+    glm::ivec3 volumeDims = m_pVolume->dims();
+    const int blockSize = m_meshConfig.blockSize;
     // If empty space skipping is disabled we will only have a single, active block
     // this contains the number of blocks in 3D
     // you need to update m_numBlocks3D with the correct values for this to work
-    m_numBlocks3D = glm::vec3(1);
+    if (!m_meshConfig.useEmptySpaceSkipping) {
 
+        m_numBlocks3D = glm::vec3(1);
 
-    // === The enclosed code works for a single block (start).
-    // You need to update it to calculate m_positions and m_minMaxValues for the general case
+    } else { // Compute number of blocks in each dim given a block size 
+
+        m_numBlocks3D = glm::ivec3(
+            (volumeDims.x + blockSize - 1) / blockSize,
+            (volumeDims.y + blockSize - 1) / blockSize,
+            (volumeDims.z + blockSize - 1) / blockSize);
+
+    }
 
     int numBlocks = m_numBlocks3D.x * m_numBlocks3D.y * m_numBlocks3D.z;
 
@@ -211,14 +227,44 @@ void GPURenderer::updateBlockingMinMaxTable()
     m_positions.clear();
     m_minMaxValues.clear();
 
-    // This reserves the positions and adds the origin, fully implemented you need to add the offset in voxels for every block
-    // we add a single offset at the origin to render one cube
-    m_positions.reserve(numBlocks);
-    m_positions.push_back(glm::vec3(0, 0, 0));
-    // we set the corresponding min-max to 0 and volume max to make sure the block is always visible
-    m_minMaxValues.reserve(numBlocks);
-    m_minMaxValues.push_back(glm::vec2(0, m_pVolume->maximum()));
-    // === The enclosed code works for a single block (end).
+    if (m_meshConfig.useEmptySpaceSkipping) {
+        m_positions.reserve(numBlocks);
+        m_minMaxValues.reserve(numBlocks);
+
+        // Loop through each and every block
+        for (int z = 0; z < m_numBlocks3D.z; ++z) {
+            for (int y = 0; y < m_numBlocks3D.y; ++y) {
+                for (int x = 0; x < m_numBlocks3D.x; ++x) {
+                    glm::ivec3 voxelOffset = glm::ivec3(x, y, z) * blockSize; // The starting voxel index in a certain block
+                    glm::ivec3 blockEnd = glm::min(voxelOffset + glm::ivec3(blockSize), volumeDims); // Guarantee not going out of borders
+
+                    float minVal = std::numeric_limits<float>::max();
+                    float maxVal = std::numeric_limits<float>::lowest();
+
+                    // Find the max and min values in each block
+                    for (int bz = voxelOffset.z; bz < blockEnd.z; ++bz) {
+                        for (int by = voxelOffset.y; by < blockEnd.y; ++by) {
+                            for (int bx = voxelOffset.x; bx < blockEnd.x; ++bx) {
+                                float val = m_pVolume->getVoxel(bx, by, bz);
+                                minVal = std::min(minVal, val);
+                                maxVal = std::max(maxVal, val);
+                            }
+                        }
+                    }
+
+                    m_positions.push_back(glm::ivec3(x, y, z)); // Apparently, this has to be directly the block index
+                    m_minMaxValues.push_back(glm::vec2(minVal, maxVal));
+                }
+            }
+        }
+    } else { // Empty voxel skipping is not on
+        // we set the corresponding min-max to 0 and volume max to make sure the block is always visible
+        m_minMaxValues.reserve(numBlocks);
+        m_minMaxValues.push_back(glm::vec2(0, m_pVolume->maximum()));
+        // Push the origin position
+        m_positions.reserve(numBlocks);
+        m_positions.push_back(glm::vec3(0, 0, 0));
+    }
 
     // after updating the positions we load them to the GPU
     glBindBuffer(GL_TEXTURE_BUFFER, positionsBufferID);
@@ -244,6 +290,36 @@ void GPURenderer::updateActiveBlocks()
     if (m_blockActive.size() == 1) {
         //  we set the active state to 1 to make it active
         m_blockActive[0] = 1;
+
+    } else { // Empty space skipping is active
+        RenderMode mode = m_renderConfig.renderMode;
+        float isoValue = m_renderConfig.isoValue;
+
+        for (size_t i = 0; i < m_positions.size(); ++i) {
+            // Find minimum and maximum values (they are in [0, 255])
+            float minVal = m_minMaxValues[i].x;
+            float maxVal = m_minMaxValues[i].y;
+
+            if (mode == RenderMode::RenderIso) {
+                // In isosurface rendering, we are only interested in whether a block has an interval including the isovalue
+                // and this is the criterion for setting a block active
+                m_blockActive[i] = (isoValue >= minVal && isoValue <= maxVal) ? 1 : 0;
+
+            } else if (mode == RenderMode::RenderComposite) {
+                // Use summed opacity table to check if any opacity exists in [minVal, maxVal]
+                int minIdx = static_cast<int>(minVal);
+                int maxIdx = static_cast<int>(maxVal);
+
+                minIdx = glm::clamp(minIdx, 0, 255);
+                maxIdx = glm::clamp(maxIdx, 0, 255);
+
+                float opacitySum = m_opacitySumTable[maxIdx] - (minIdx > 0 ? m_opacitySumTable[minIdx - 1] : 0.0f);
+                m_blockActive[i] = (opacitySum > 0.0f) ? 1 : 0;
+            } else {
+                // Default fallback: always active
+                m_blockActive[i] = 1;
+            }
+        }
     }
 
     // this works for any m_blockActive size

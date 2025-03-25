@@ -102,7 +102,6 @@ void main()
     // ray direction from the direction texture
     vec3 direction = texture(backFaces, TexCoords).xyz - samplePos;
 
-
     // ======= TODO: IMPLEMENT ========
     //
     // Part of **3. Volume Bricking**
@@ -144,7 +143,7 @@ void main()
         if ((prevIntensity < isoValue && currentIntensity >= isoValue) ||
             (prevIntensity > isoValue && currentIntensity <= isoValue)) {
 
-             // --- Bisection refinement ---
+            // Bisection refinement
             vec3 low = samplePos - ray_increment;
             vec3 high = samplePos;
             for (int j = 0; j < 5; ++j) { // 5 bisection steps

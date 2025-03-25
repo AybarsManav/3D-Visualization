@@ -110,7 +110,6 @@ void main()
     // ray direction from the direction texture
     vec3 direction = texture(backFaces, TexCoords).xyz - samplePos;
 
-
     // ======= TODO: IMPLEMENT ========
     //
     // Part of **3. Volume Bricking**
