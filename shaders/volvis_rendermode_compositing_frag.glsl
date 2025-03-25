@@ -70,9 +70,19 @@ vec3 phongShading(vec3 color, vec4 normal, vec3 L, vec3 V)
 // Note: The function can be cpoied over to iso-surface shader once implemented
 vec4 calculateGradient(vec3 samplePos, vec3 voxelSize)
 {
-    vec4 gradient = vec4(0.0f);
+    float gx = texture(volumeData, samplePos + vec3(voxelSize.x, 0, 0)).r -
+               texture(volumeData, samplePos - vec3(voxelSize.x, 0, 0)).r;
 
-    return gradient;
+    float gy = texture(volumeData, samplePos + vec3(0, voxelSize.y, 0)).r -
+               texture(volumeData, samplePos - vec3(0, voxelSize.y, 0)).r;
+
+    float gz = texture(volumeData, samplePos + vec3(0, 0, voxelSize.z)).r -
+               texture(volumeData, samplePos - vec3(0, 0, voxelSize.z)).r;
+
+    vec3 gradientVec = vec3(gx, gy, gz);
+    float magnitude = length(gradientVec);
+
+    return vec4(gradientVec, magnitude);
 }
 
 
@@ -119,21 +129,51 @@ void main()
     if(volumeInfo.w > 0.5f){
     }
 
+    vec3 voxelSize = volumeInfo.xyz;
+
     // we split the ray into the normalized direction and the length
-    vec3 ray_direction = normalize(direction / volumeInfo.xyz);
-    float ray_length = length(direction / volumeInfo.xyz);
+    vec3 ray_direction = normalize(direction / voxelSize);
+    float ray_length = length(direction / voxelSize);
 
     int numSteps = int(ray_length / renderOptions.z);
-    vec3 ray_increment = ray_direction * volumeInfo.xyz * renderOptions.z;
+    vec3 ray_increment = ray_direction * voxelSize * renderOptions.z;
 
     vec4 color = vec4(0.0f);
-    for(int i = 0; i < numSteps; i++) {
+    float alphaAccum = 0.0f;
 
-        // ======= TODO: IMPLEMENT ========
-        // replace this with your code
-        color = vec4(samplePos, 0.0f);
+    for (int i = 0; i < numSteps; i++) {
+        float intensity = texture(volumeData, samplePos).r;
+        float normIntensity = intensity * volumeMaxValues.x;
+        vec4 tfColor = texture(transferFunction, vec2(normIntensity, 0.5));
+
+        // Compute gradient and magnitude
+        vec4 gradient = calculateGradient(samplePos, voxelSize);
+        float gm = gradient.a * volumeMaxValues.y;
+
+        // Rheingans and Ebert gradient-based opacity modulation
+        float opacityMod = 1.0;
+        if (int(gmParams.w) == 1) {
+            opacityMod = gmParams.x + gmParams.y * pow(gm, gmParams.z);
+        }
+
+        float alpha = tfColor.a * opacityMod * (1.0 - alphaAccum);
+        vec3 rgb = tfColor.rgb;
+
+        if (int(renderOptions.w) == 1) {
+            vec3 L = normalize(-ray_direction); // Light = camera
+            vec3 V = normalize(-ray_direction);
+            rgb = phongShading(rgb, gradient, L, V);
+        }
+
+        color.rgb += rgb * alpha;
+        alphaAccum += alpha;
+
+        if (alphaAccum >= 0.95f)
+            break; // early ray termination
+
+        samplePos += ray_increment;
     }
 
-    // this sets the final color to the pixel
+    color.a = clamp(alphaAccum, 0.0, 1.0);
     FragColor = color;
 }

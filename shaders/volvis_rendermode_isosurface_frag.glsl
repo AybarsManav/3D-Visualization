@@ -65,9 +65,19 @@ vec3 phongShading(vec3 color, vec4 gradient, vec3 L, vec3 V)
 // Note: The function can be cpoied over to compositing shader once implemented
 vec4 calculateGradient(vec3 samplePos, vec3 voxelSize)
 {
-    vec4 gradient = vec4(0.0f);
+    float gx = texture(volumeData, samplePos + vec3(voxelSize.x, 0, 0)).r -
+               texture(volumeData, samplePos - vec3(voxelSize.x, 0, 0)).r;
 
-    return gradient;
+    float gy = texture(volumeData, samplePos + vec3(0, voxelSize.y, 0)).r -
+               texture(volumeData, samplePos - vec3(0, voxelSize.y, 0)).r;
+
+    float gz = texture(volumeData, samplePos + vec3(0, 0, voxelSize.z)).r -
+               texture(volumeData, samplePos - vec3(0, 0, voxelSize.z)).r;
+
+    vec3 gradientVec = vec3(gx, gy, gz);
+    float magnitude = length(gradientVec);
+
+    return vec4(gradientVec, magnitude);
 }
 
 
@@ -123,13 +133,58 @@ void main()
     // assing a color for the isosurface
     vec3 color = vec3(1,1,0);
 
-    for(int i = 0; i < numSteps; i++) {
+    vec3 voxelSize = volumeInfo.xyz;
+    float prevIntensity = texture(volumeData, samplePos).r; // Initialize as intenity at first samplePos
+    samplePos += ray_increment; // Increment ray to be able to apply bisection method
+    for(int i = 1; i < numSteps; i++) {
 
-        // ======= TODO: IMPLEMENT ========
-        // replace this with your code
-        FragColor = vec4(color, 1.0);
-        return;
+        float currentIntensity = float(texture(volumeData, samplePos).r); // Get current intensity
+
+        // Check if the isovalue is crossed
+        if ((prevIntensity < isoValue && currentIntensity >= isoValue) ||
+            (prevIntensity > isoValue && currentIntensity <= isoValue)) {
+
+             // --- Bisection refinement ---
+            vec3 low = samplePos - ray_increment;
+            vec3 high = samplePos;
+            for (int j = 0; j < 5; ++j) { // 5 bisection steps
+
+                vec3 mid = (low + high) * 0.5;
+                float midIntensity = texture(volumeData, mid).r;
+                if ((prevIntensity < isoValue && midIntensity < isoValue) ||
+                    (prevIntensity > isoValue && midIntensity > isoValue)) {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
+
+            }
+            vec3 isoHitPos = (low + high) * 0.5;
+
+            // Compute gradient at isoHitPos
+            vec4 gradient = calculateGradient(isoHitPos, voxelSize);
+
+            // Lighting vectors
+            vec3 L = normalize(-ray_direction); // Light comes from the camera
+            vec3 V = normalize(-ray_direction); // View direction
+
+            // Use shading
+            vec3 shadedColor;
+            if (int(renderOptions.w) == 1) {
+                // Shaded color
+                shadedColor = phongShading(color, gradient, L, V);
+            }
+            else { // Do not use shading
+                shadedColor = color;
+            }
+            
+            FragColor = vec4(shadedColor, 1.0);
+            return;
+        }
+
+        prevIntensity = currentIntensity; // Update the previous intensity
+        samplePos += ray_increment;
     }
     
-    FragColor = vec4(0.0);
+    FragColor = vec4(0.0); // No hit
 }
