@@ -7,16 +7,20 @@
 
 namespace volume {
 
-enum class FileExtension {
-    FLD = 0,
-    DAT = 1
-}; 
-
 enum class InterpolationMode {
     NearestNeighbour = 0,
     Linear,
     Cubic
 };
+
+enum class VolumeType {
+    Volume = 0
+}; 
+
+enum class FileExtension {
+    FLD = 0,
+    DAT = 1
+}; 
 
 class Volume {
 public:
@@ -35,7 +39,9 @@ public:
 
     float getSampleInterpolate(const glm::vec3& coord) const;
     float getVoxel(int x, int y, int z) const;
-    float getVoxel(const glm::ivec3& pos) const;
+    std::vector<float> getData() const;
+
+    VolumeType getVolumeType() const;
 
 protected:
     float getSampleNearestNeighbourInterpolation(const glm::vec3& coord) const;
@@ -51,16 +57,20 @@ protected:
 
 private:
     void loadFile(const std::filesystem::path& file);
+
     void loadVolumeData(std::ifstream& ifs);
+    void loadVectorFieldData();
+    void flipXYVectorField();
 
 protected:
+    VolumeType m_dataType;
     FileExtension m_fileExtension;
 
     const std::string m_fileName;
     size_t m_elementSize;
-    glm::ivec3 m_dim; // (0, 0, 0) and this defines the space
+    glm::ivec3 m_dim;
 
-    std::vector<float> m_data; // technically most of the data we are dealing with is uint16_t but float is easier to work with
+    std::vector<float> m_data; // technically the data is uint16_t but float is easier to work with
 
     float m_minimum, m_maximum;
     std::vector<int> m_histogram;

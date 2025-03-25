@@ -157,35 +157,7 @@ glm::vec4 Renderer::traceRayMIP(const Ray& ray, float stepSize) const
 glm::vec4 Renderer::traceRayISO(const Ray& ray, float stepSize) const
 {
     static constexpr glm::vec3 isoColor { 0.8f, 0.8f, 0.2f };
-    glm::vec3 samplePos = ray.origin + ray.tmin * ray.direction;
-    const glm::vec3 increment = stepSize * ray.direction;
-
-    for (float t = ray.tmin; t <= ray.tmax; t += stepSize, samplePos += increment) {
-
-        // get value at current position
-        const float val = m_pVolume->getSampleInterpolate(samplePos);
-
-        // if the value is greater or equal than the isoValue, stop
-        if (val >= m_config.isoValue) {
-
-            if (m_config.bisection) {
-                // find best time step t for more accurate sample position of the iso-value
-                float accurateT = bisectionAccuracy(ray, t - stepSize, t, m_config.isoValue);
-                samplePos = ray.origin + accurateT * ray.direction;
-            }
-
-            if (m_config.volumeShading) {
-
-                // compute and return phong shading
-                auto phong = computePhongShading(glm::normalize(isoColor), m_pGradientVolume->getGradientInterpolate(samplePos), -glm::normalize(m_pCamera->position()), ray.direction);
-                return glm::vec4(phong, 1.0f);
-            }
-            // return isoColor when volume shading is DISABLED
-            return glm::vec4(isoColor, 1.0f);
-        }
-    }
-    // no intersection with object found, return black
-    return glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+    return glm::vec4(isoColor, 1.0f);
 }
 
 // ======= TODO: IMPLEMENT ========
@@ -194,71 +166,19 @@ glm::vec4 Renderer::traceRayISO(const Ray& ray, float stepSize) const
 // iterations such that it does not get stuck in degerate cases.
 float Renderer::bisectionAccuracy(const Ray& ray, float t0, float t1, float isoValue) const
 {
-    int maxiter = 100;
-
-    glm::vec3 samplePos = ray.origin + t1 * ray.direction;
-    float tnew = t1;
-    float val = m_pVolume->getSampleInterpolate(samplePos);
-
-    for (int iter = 0; iter < maxiter; iter++) {
-        if (std::abs(val - isoValue) < 0.01) {
-
-            // stop when closely matching the iso value
-            return tnew;
-        }
-
-        // get new position by bisecting the range
-        tnew = (t0 + t1) / 2.0f;
-        samplePos = ray.origin + tnew * ray.direction;
-        val = m_pVolume->getSampleInterpolate(samplePos);
-
-        // update such that potential intersection stays between t0 and t1
-        if (val < isoValue) {
-            t0 = tnew;
-        } else {
-            t1 = tnew;
-        }
-    }
-    return t1;
+    return 0.0f;
 }
 
 // ======= TODO: IMPLEMENT ========
 // Compute Phong Shading given the voxel color (material color), the gradient, the light vector and view vector.
+// You can find out more about the Phong shading model at:
+// https://en.wikipedia.org/wiki/Phong_reflection_model
 //
 // you are allowed to modify the default parameters in the .h file, if needed. DO NOT modify them inside the function.
 
 glm::vec3 Renderer::computePhongShading(const glm::vec3& color, const volume::GradientVoxel& gradient, const glm::vec3& L, const glm::vec3& V, float ambientCoefficient, float diffuseCoefficient, float specularCoefficient, int specularPower)
 {
-
-    // Normal from gradient
-    glm::vec3 N = gradient.dir;
-    if (glm::length(N) > 0.0f) {
-        N = glm::normalize(N);
-    }
-
-    // Ensure the normal faces the viewer
-    if (glm::dot(N, V) < 0.0f) {
-        N = -N;
-    }
-
-    // Compute the diffuse component, clamping to zero if negative
-    float dotLN = glm::dot(L, N);
-    float diffuseTerm = std::max(dotLN, 0.0f);
-
-    // Reflect L around N and compute specular term, also clamping to zero
-    glm::vec3 R = glm::reflect(-L, N);
-    float dotRV = glm::dot(R, V);
-    float specularTerm = 0.0f;
-    if (diffuseTerm > 0.0f) {
-        specularTerm = std::max(dotRV, 0.0f);
-    }
-
-    // Calculate ambient, diffuse and specular
-    glm::vec3 ambient = ambientCoefficient * color;
-    glm::vec3 diffuse = diffuseCoefficient * diffuseTerm * color;
-    glm::vec3 specular = specularCoefficient * glm::pow(specularTerm, float(specularPower)) * color;
-
-    return ambient + diffuse + specular;
+    return glm::vec3(0.0f);
 }
 
 // ======= TODO: IMPLEMENT ========
@@ -266,38 +186,7 @@ glm::vec3 Renderer::computePhongShading(const glm::vec3& color, const volume::Gr
 // Use getTFValue to compute the color for a given volume value according to the 1D transfer function.
 glm::vec4 Renderer::traceRayComposite(const Ray& ray, float stepSize) const
 {
-
-    float t = ray.tmin;
-    const auto step = ray.direction * stepSize;
-    auto pos = ray.origin + ray.direction * ray.tmin;
-    glm::vec4 aggregated_samples = glm::vec4(0.0f);
-    // we sample the volume until we exit the volume, or the opacity has become (pretty much) opaque.
-    while (t <= ray.tmax && aggregated_samples.w < 0.99f) {
-        const float sample = this->m_pVolume->getSampleInterpolate(pos);
-        glm::vec4 color_sample = this->getTFValue(sample);
-
-        if (m_config.volumeShading) {
-            // if shading is enabled, compute phong with a lightsource coming from the camera
-            auto gradient = m_pGradientVolume->getGradientInterpolate(pos);
-            // we need to catch the case where the gradient is zero as that will result in NaNs for phong
-            // similarly when the gradient moves away from the ray, we do not want to compute shading as that will negate the compositing effect
-            if (glm::length(gradient.dir) > 0.0f && glm::dot(gradient.dir, ray.direction) > 0.0f) {
-                auto phong = computePhongShading(glm::vec3(color_sample), gradient, ray.direction, ray.direction);
-                color_sample = glm::vec4(phong, color_sample.w);
-            }
-        }
-
-        // pre-multiply colors with its own alpha channel
-        color_sample *= glm::vec4(glm::vec3(color_sample.w), 1.0f);
-
-        // C'i = C'i-1 + (1 - A'i-1)*Ci
-        // A'i = A'i-1 + (1 - A'i-1)*Ai
-        aggregated_samples += (1.0f - aggregated_samples.w) * color_sample;
-        t += stepSize;
-        pos += step;
-    }
-
-    return aggregated_samples;
+    return glm::vec4(0.0f);
 }
 
 // ======= DO NOT MODIFY THIS FUNCTION ========
@@ -310,7 +199,6 @@ glm::vec4 Renderer::getTFValue(float val) const
     const size_t i = std::min(static_cast<size_t>(range01 * static_cast<float>(m_config.tfColorMap.size())), m_config.tfColorMap.size() - 1);
     return m_config.tfColorMap[i];
 }
-
 
 // This function computes if a ray intersects with the axis-aligned bounding box around the volume.
 // If the ray intersects then tmin/tmax are set to the distance at which the ray hits/exists the

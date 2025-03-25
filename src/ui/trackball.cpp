@@ -73,7 +73,7 @@ glm::mat4 Trackball::viewMatrix() const
 
 glm::mat4 Trackball::projectionMatrix() const
 {
-    return glm::perspective(m_fovy, m_aspectRatio, 10.0f, 1000.0f);
+    return glm::perspective(m_fovy, m_aspectRatio, 10.0f, 5000.0f);
 }
 
 glm::vec3 Trackball::up() const
@@ -106,12 +106,30 @@ render::Ray Trackball::generateRay(const glm::vec2& pixel) const
     return ray;
 }
 
+glm::vec4 Trackball::getRectByMouse() const
+{
+    return m_mouseRect;
+}
+
 // This function handles mouse button interaction, where the type of movement depends on
 //  the button pressed
 void Trackball::mouseButtonCallback(int button, int action, int /* mods */)
 {
     if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_PRESS) {
         m_prevCursorPos = m_pWindow->cursorPos();
+
+        // store cursor point on button press
+        if ((button == GLFW_MOUSE_BUTTON_LEFT) && m_mouseReleased) {
+            m_mouseReleased = false;
+            m_mouseRect.x = m_prevCursorPos.x;
+            m_mouseRect.y = m_prevCursorPos.y;
+            m_mouseRect.z = m_prevCursorPos.x;
+            m_mouseRect.w = m_prevCursorPos.y;
+        }
+    }
+
+    if ((button == GLFW_MOUSE_BUTTON_LEFT) && action == GLFW_RELEASE) {
+        m_mouseReleased = true;
     }
 }
 
@@ -128,9 +146,13 @@ void Trackball::mouseMoveCallback(const glm::vec2& pos)
 
         if (rotateXY) {
             // Rotate model.
-            m_rotation = glm::angleAxis(glm::radians(-delta.x * rotationSpeedFactor), up()) * m_rotation;
-            m_rotation = glm::angleAxis(glm::radians(delta.y * rotationSpeedFactor), left()) * m_rotation;
-            m_rotation = glm::normalize(m_rotation); // Prevent floating point drift from accumulating over time.
+            if (m_enableRotation) {
+                m_rotation = glm::angleAxis(glm::radians(-delta.x * rotationSpeedFactor), up()) * m_rotation;
+                m_rotation = glm::angleAxis(glm::radians(delta.y * rotationSpeedFactor), left()) * m_rotation;
+                m_rotation = glm::normalize(m_rotation); // Prevent floating point drift from accumulating over time.
+            }
+            m_mouseRect.z = m_prevCursorPos.x;
+            m_mouseRect.w = m_prevCursorPos.y;
         } else {
             m_lookAt -= delta.x * m_worldScale * translationSpeedFactor * left();
             m_lookAt -= delta.y * m_worldScale * translationSpeedFactor * up();
@@ -153,6 +175,47 @@ void Trackball::mouseScrollCallback(const glm::vec2& offset)
 void Trackball::updateCameraPos()
 {
     m_cameraPos = m_lookAt + m_rotation * glm::vec3(0, 0, -m_distanceFromLookAt);
+}
+
+bool Trackball::rayIntersectsRect(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
+    const glm::vec3& rectMin, const glm::vec3& rectMax,
+    const glm::vec3& rectNormal, glm::vec3& intersectionPoint)
+{
+    // 1. Calculate the plane equation: n ? (p - p0) = 0
+    float denom = glm::dot(rectNormal, rayDir);
+    if (glm::abs(denom) < 1e-6f) {
+        // Ray is parallel to the rectangle plane
+        return false;
+    }
+
+    // 2. Find intersection with the plane
+    float t = glm::dot(rectNormal, rectMin - rayOrigin) / denom;
+    if (t < 0) {
+        // Intersection is behind the ray's origin
+        return false;
+    }
+
+    // 3. Calculate intersection point
+    glm::vec3 point = rayOrigin + t * rayDir;
+
+    // 4. Check if the point lies within the rectangle bounds
+    glm::vec3 minProj = glm::min(rectMin, rectMax);
+    glm::vec3 maxProj = glm::max(rectMin, rectMax);
+
+    if (point.x >= minProj.x && point.x <= maxProj.x && point.y >= minProj.y && point.y <= maxProj.y && point.z >= minProj.z && point.z <= maxProj.z) {
+        intersectionPoint = point;
+        return true;
+    }
+
+    intersectionPoint.x = glm::clamp(point.x, minProj.x, maxProj.x);
+    intersectionPoint.y = glm::clamp(point.y, minProj.y, maxProj.y);
+
+    return false;
+}
+
+void Trackball::enableRotation(const bool& bEnableRotation)
+{
+    m_enableRotation = bEnableRotation;
 }
 
 }

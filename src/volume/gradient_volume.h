@@ -21,10 +21,12 @@ public:
 
     GradientVoxel getGradientInterpolate(const glm::vec3& coord) const;
     GradientVoxel getGradient(int x, int y, int z) const;
+    glm::vec4 gradientToVec4(GradientVoxel voxel) const;
 
     float minMagnitude() const;
     float maxMagnitude() const;
     glm::ivec3 dims() const;
+    std::vector<glm::vec4> getVec4Data() const;
 
 protected:
     GradientVoxel getGradientNearestNeighbor(const glm::vec3& coord) const;

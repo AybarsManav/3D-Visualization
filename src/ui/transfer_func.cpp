@@ -1,4 +1,4 @@
-﻿#include "ui/transfer_func.h"
+#include "ui/transfer_func.h"
 #include <algorithm>
 #include <cassert>
 #include <filesystem>
@@ -30,6 +30,7 @@ TransferFunctionWidget::TransferFunctionWidget(const volume::Volume& volume)
     , m_selectedPoint(sentinel)
     , m_histogramImg(createTexture())
     , m_colorMapImg(createTexture())
+    , m_colorMapImgOpague(createTexture())
 {
     m_tfPoints.push_back(TFPoint { glm::vec2(0.0f), glm::vec4(0.0f) });
     m_tfPoints.push_back(TFPoint { glm::vec2(0.06f, 0.0f), glm::vec4(0.0f) });
@@ -43,11 +44,15 @@ TransferFunctionWidget::TransferFunctionWidget(const volume::Volume& volume)
     m_tfPoints.push_back(TFPoint { glm::vec2(1.0f), glm::vec4(1.0f) });
 
     const auto histogram = volume.histogram();
-    const auto imgData = createHistogramImage(histogram, histogramOpacity);
 
-    glBindTexture(GL_TEXTURE_2D, m_histogramImg);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GLsizei(histogram.size()), GLsizei(widgetSize.y), 0, GL_RGBA, GL_FLOAT, imgData.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
+    // vector field volume has no histogram
+    if (histogram.size() > 0) {
+        const auto imgData = createHistogramImage(histogram, histogramOpacity);
+
+        glBindTexture(GL_TEXTURE_2D, m_histogramImg);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GLsizei(histogram.size()), GLsizei(widgetSize.y), 0, GL_RGBA, GL_FLOAT, imgData.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 
     updateColormap();
 }
@@ -59,6 +64,7 @@ void TransferFunctionWidget::updateRenderConfig(render::RenderConfig& renderConf
     // Color map ranges from 0 to volume.maximum(). See volume.histogram() for details...
     renderConfig.tfColorMapIndexStart = 0;
     renderConfig.tfColorMapIndexRange = m_maxValue;
+    renderConfig.tfTexId = m_colorMapImg;
 }
 
 // Draw the widget and handle interactions.
@@ -128,8 +134,6 @@ void TransferFunctionWidget::draw()
     if (ImGui::IsItemHovered() && (io.MouseDown[0] || io.MouseDown[1])) {
         const glm::vec2 mousePos = glm::clamp((clippedMousePos - viewOffset) / viewScale, 0.0f, 1.0f);
 
-        std::cout << "( " << mousePos.x << ", " << mousePos.y << ") " << "\n";
-
         // No point is currently selected. Check if the user clicked on a point.
         if (m_interactingPoint == sentinel) {
             for (size_t i = 0; i < m_tfPoints.size(); i++) {
@@ -195,7 +199,7 @@ void TransferFunctionWidget::draw()
 
     // Draw colormap.
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xOffset);
-    std::memcpy(&imguiTexture, &m_colorMapImg, sizeof(m_colorMapImg));
+    std::memcpy(&imguiTexture, &m_colorMapImgOpague, sizeof(m_colorMapImgOpague));
     ImGui::Image(imguiTexture, ImVec2(canvasSize.x, 16));
 
     // Bottom text
@@ -230,6 +234,10 @@ void TransferFunctionWidget::updateColormap()
 
     // Upload it to the GPU.
     glBindTexture(GL_TEXTURE_2D, m_colorMapImg);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, GLsizei(m_colorMap.size()), 1, 0, GL_RGBA, GL_FLOAT, m_colorMap.data());
+
+    // Opague version for the UI.
+    glBindTexture(GL_TEXTURE_2D, m_colorMapImgOpague);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, GLsizei(m_colorMap.size()), 1, 0, GL_RGBA, GL_FLOAT, m_colorMap.data());
 }
 
@@ -250,7 +258,6 @@ glm::vec4 TransferFunctionWidget::TFPtoRGBA(const TFPoint& p)
 {
     // Extract the rgb and alpha values from a corresponding TFPoint in the widget.
     return p.color;
-//    return glm::vec4(glm::vec3(p.color), p.pos.y);
 }
 
 }

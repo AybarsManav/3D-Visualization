@@ -36,5 +36,6 @@ private:
     size_t m_selectedPoint; // Point that is selected (for which the color picker is shown).
     GLuint m_histogramImg;
     GLuint m_colorMapImg;
+    GLuint m_colorMapImgOpague;
 };
 }

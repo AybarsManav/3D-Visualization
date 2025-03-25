@@ -1,16 +1,20 @@
 #pragma once
+#include <GL/glew.h>
 #include <array>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
-#include <cstring> // memcmp  // macOS change TH
+#include <glm/gtc/epsilon.hpp>
+#include <cstring>
+#include <cmath>
 
 namespace render {
 
 enum class RenderMode {
-    RenderSlicer,
-    RenderMIP,
-    RenderIso,
-    RenderComposite
+    RenderSlicer = 0,
+    RenderMIP = 1,
+    RenderIso = 2,
+    RenderComposite = 3
 };
 
 struct RenderConfig {
@@ -19,8 +23,17 @@ struct RenderConfig {
     float stepSize { 1.0f };
 
     bool volumeShading { false };
+    bool clippingPlanes { false };
+
+    bool useOpacityModulation {false };
+    glm::vec4 illustrativeParams { glm::vec4(0.0, 1.0, 1.0, 1.0) };
+    
+    bool updateTF { false }; // Used in the main loop to know when the TF should be updated. Defined as a parameter instead of a callback since the TF is already in this struct and seperating it would make thing more complex in other parts of the code
+
     float isoValue { 95.0f };
     bool bisection { false };
+    
+    int renderStep { 3 };
 
     // 1D transfer function.
     std::array<glm::vec4, 256> tfColorMap;
@@ -28,11 +41,7 @@ struct RenderConfig {
     // index = (value - start) / range * tfColorMap.size();
     float tfColorMapIndexStart;
     float tfColorMapIndexRange;
-
-    // 2D transfer function.
-    float TF2DIntensity;
-    float TF2DRadius;
-    glm::vec4 TF2DColor;
+    GLuint tfTexId; 
 };
 
 // NOTE(Mathijs): should be replaced by C++20 three-way operator (aka spaceship operator) if we require C++ 20 support from Linux users (GCC10 / Clang10).

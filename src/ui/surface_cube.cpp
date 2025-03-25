@@ -60,8 +60,8 @@ SurfaceCube::SurfaceCube()
 
     // Load shader
     {
-        GLuint vertexShader = loadShader("surface_cube.vs", GL_VERTEX_SHADER);
-        GLuint fragmentShader = loadShader("surface_cube.fs", GL_FRAGMENT_SHADER);
+        GLuint vertexShader = loadShader("volvis_surface_cube_vert.glsl", GL_VERTEX_SHADER);
+        GLuint fragmentShader = loadShader("volvis_surface_cube_frag.glsl", GL_FRAGMENT_SHADER);
 
         m_shader = glCreateProgram();
         glAttachShader(m_shader, vertexShader);

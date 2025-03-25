@@ -38,8 +38,8 @@ WireframeCube::WireframeCube()
 
     // Load shader
     {
-        GLuint vertexShader = loadShader("wireframe_cube.vs", GL_VERTEX_SHADER);
-        GLuint fragmentShader = loadShader("wireframe_cube.fs", GL_FRAGMENT_SHADER);
+        GLuint vertexShader = loadShader("wireframe_cube_vert.glsl", GL_VERTEX_SHADER);
+        GLuint fragmentShader = loadShader("wireframe_cube_frag.glsl", GL_FRAGMENT_SHADER);
 
         m_shader = glCreateProgram();
         glAttachShader(m_shader, vertexShader);

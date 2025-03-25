@@ -48,12 +48,21 @@ target_link_libraries(Viewer
 		GLEW::GLEW)
 
 # Copy glsl files to build directory
-configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/viewer_output.vs" "${CMAKE_CURRENT_BINARY_DIR}/viewer_output.vs" COPYONLY)
-configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/viewer_output.fs" "${CMAKE_CURRENT_BINARY_DIR}/viewer_output.fs" COPYONLY)
-configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/wireframe_cube.vs" "${CMAKE_CURRENT_BINARY_DIR}/wireframe_cube.vs" COPYONLY)
-configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/wireframe_cube.fs" "${CMAKE_CURRENT_BINARY_DIR}/wireframe_cube.fs" COPYONLY)
-configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/surface_cube.vs" "${CMAKE_CURRENT_BINARY_DIR}/surface_cube.vs" COPYONLY)
-configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/surface_cube.fs" "${CMAKE_CURRENT_BINARY_DIR}/surface_cube.fs" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/viewer_output_vert.glsl" "${CMAKE_CURRENT_BINARY_DIR}/viewer_output_vert.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/viewer_output_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/viewer_output_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/wireframe_cube_vert.glsl" "${CMAKE_CURRENT_BINARY_DIR}/wireframe_cube_vert.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/wireframe_cube_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/wireframe_cube_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_surface_cube_vert.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_surface_cube_vert.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_surface_cube_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_surface_cube_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/gpu_optimization_vert.glsl" "${CMAKE_CURRENT_BINARY_DIR}/gpu_optimization_vert.glsl" COPYONLY)
+# volvis GPU setup
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_colorcube_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_colorcube_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_screen_filling_quad_vert.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_screen_filling_quad_vert.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_screen_filling_quad_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_screen_filling_quad_frag.glsl" COPYONLY)
+# volvis GPU rendermodes
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_rendermode_mip_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_rendermode_mip_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_rendermode_isosurface_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_rendermode_isosurface_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_rendermode_compositing_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_rendermode_compositing_frag.glsl" COPYONLY)
 
 enable_testing()
 add_subdirectory("integrity_tests")

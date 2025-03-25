@@ -32,6 +32,14 @@ public:
     // Generate ray given pixel in NDC space (-1 to +1)
     render::Ray generateRay(const glm::vec2& pixel) const override;
 
+    glm::vec4 getRectByMouse()const;
+
+    bool rayIntersectsRect(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
+        const glm::vec3& rectMin, const glm::vec3& rectMax,
+        const glm::vec3& rectNormal, glm::vec3& intersectionPoint);
+
+    void enableRotation(const bool& bEnableRotation);
+
 private:
     void mouseButtonCallback(int button, int action, int mods);
     void mouseMoveCallback(const glm::vec2& pos);
@@ -52,5 +60,10 @@ private:
     glm::quat m_rotation { glm::identity<glm::quat>() };
 
     glm::vec2 m_prevCursorPos; // Cursor position.
+
+    glm::vec4 m_mouseRect;
+
+    bool m_enableRotation {true};
+    bool m_mouseReleased {true}; // whether mouse was released or not in previous frame
 };
 }

@@ -52,8 +52,8 @@ FullScreenTextureGL::FullScreenTextureGL()
 
     // Load shader
     {
-        GLuint vertexShader = loadShader("viewer_output.vs", GL_VERTEX_SHADER);
-        GLuint fragmentShader = loadShader("viewer_output.fs", GL_FRAGMENT_SHADER);
+        GLuint vertexShader = loadShader("viewer_output_vert.glsl", GL_VERTEX_SHADER);
+        GLuint fragmentShader = loadShader("viewer_output_frag.glsl", GL_FRAGMENT_SHADER);
 
         m_shader = glCreateProgram();
         glAttachShader(m_shader, vertexShader);

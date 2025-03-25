@@ -42,7 +42,6 @@ protected:
     glm::vec4 traceRayMIP(const Ray& ray, float sampleStep) const;
     glm::vec4 traceRayISO(const Ray& ray, float sampleStep) const;
     glm::vec4 traceRayComposite(const Ray& ray, float sampleStep) const;
-
     float bisectionAccuracy(const Ray& ray, float t0, float t1, float isoValue) const;
 
     static glm::vec3 computePhongShading(const glm::vec3& color, const volume::GradientVoxel& gradient, const glm::vec3& L, const glm::vec3& V, float ambientCoefficient=0.1f, float diffuseCoefficient=0.7f, float specularCoefficient=0.2f, int specularPower=25);
@@ -54,7 +53,6 @@ private:
     void resetImage();
 
     glm::vec4 getTFValue(float val) const;
-
     bool instersectRayVolumeBounds(Ray& ray, const Bounds& volumeBounds) const;
     void fillColor(int x, int y, const glm::vec4& color);
 
@@ -62,7 +60,7 @@ protected:
     const volume::Volume* m_pVolume;
     const volume::GradientVolume* m_pGradientVolume;
     const render::RayTraceCamera* m_pCamera;
-    RenderConfig m_config;
+    RenderConfig m_config {};
 
     std::vector<glm::vec4> m_frameBuffer;
 };

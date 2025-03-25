@@ -10,14 +10,18 @@
 #include <gsl/span>
 #include <iostream>
 #include <string>
+#include <cstring>
+#include <unordered_map>
+
 
 struct Header {
     glm::ivec3 dim;
     size_t elementSize;
 };
-static Header readHeader(std::ifstream& ifs, const volume::FileExtension& fileExtension);
+static Header readHeader(std::ifstream& ifs, const volume::VolumeType& dataType, const volume::FileExtension& fileExtension);
 static Header readVolumeHeader_fld(std::ifstream& ifs);
 static Header readVolumeHeader_dat(std::ifstream& ifs);
+static Header readVectorFieldHeader(std::ifstream& ifs);
 
 static float computeMinimum(gsl::span<const float> data);
 static float computeMaximum(gsl::span<const float> data);
@@ -34,7 +38,7 @@ Volume::Volume(const std::filesystem::path& file)
     auto end = clock::now();
     std::cout << "Time to load: " << std::chrono::duration<double, std::milli>(end - start).count() << "ms" << std::endl;
 
-    if (m_data.size() > 0) {
+    if (m_dataType == VolumeType::Volume && m_data.size() > 0) {
         m_minimum = computeMinimum(m_data);
         m_maximum = computeMaximum(m_data);
         m_histogram = computeHistogram(m_data);
@@ -83,6 +87,16 @@ float Volume::getVoxel(int x, int y, int z) const
     return static_cast<float>(m_data[i]);
 }
 
+std::vector<float> Volume::getData() const
+{
+    return m_data;
+}
+
+VolumeType Volume::getVolumeType() const
+{
+    return m_dataType;
+}
+
 // This function returns a value based on the current interpolation mode
 float Volume::getSampleInterpolate(const glm::vec3& coord) const
 {
@@ -124,23 +138,7 @@ float Volume::getSampleNearestNeighbourInterpolation(const glm::vec3& coord) con
 // This function returns the trilinear interpolated value at the continuous 3D position given by coord.
 float Volume::getSampleTriLinearInterpolation(const glm::vec3& coord) const
 {
-    if (glm::any(glm::lessThan(coord, glm::vec3(0))) || glm::any(glm::greaterThanEqual(coord + 1.0f, glm::vec3(m_dim)))) {
-        return 0.0f;
-    }
-
-    // For tri-linear interpolation, we need to basically do the same as bi-linear interpolation
-    // Given the continuous xy coordinate we need to compute that for the floor and ceil of z and
-    // interpolate those two results
-    const int floor_z = static_cast<int>(floorf(coord.z));
-    const int ceil_z = floor_z + 1;
-    const glm::vec2 xy_coord = glm::vec2(coord.x, coord.y);
-    const float z_factor = coord.z - floor_z;
-
-    const float interpolated_floor = this->biLinearInterpolate(xy_coord, floor_z);
-    const float interpolated_ceil = this->biLinearInterpolate(xy_coord, ceil_z);
-
-    const float interpolated_result = Volume::linearInterpolate(interpolated_floor, interpolated_ceil, z_factor);
-    return interpolated_result;
+    return 0.0f;
 }
 
 // This function linearly interpolates the value at X using incoming values g0 and g1 given a factor (equal to the positon of x in 1D)
@@ -149,33 +147,13 @@ float Volume::getSampleTriLinearInterpolation(const glm::vec3& coord) const
 //   factor
 float Volume::linearInterpolate(float g0, float g1, float factor)
 {
-    return std::lerp(g0, g1, factor);
+    return 0.0f;
 }
 
 // This function bi-linearly interpolates the value at the given continuous 2D XY coordinate for a fixed integer z coordinate.
 float Volume::biLinearInterpolate(const glm::vec2& xyCoord, int z) const
 {
-    // To bi-linearly interpolate we need to get the interpolated value of min_y, min_x and min_y and max_x
-    // This value gets interpolated with the interpolated value of max_y, min_x and max_y, max_x
-    const int min_y = static_cast<int>(floorf(xyCoord.y));
-    const int max_y = min_y + 1;
-    const int min_x = static_cast<int>(floorf(xyCoord.x));
-    const int max_x = min_x + 1;
-
-    const float x_factor = xyCoord.x - min_x;
-    const float y_factor = xyCoord.y - min_y;
-
-    const float a = this->getVoxel(min_x, min_y, z);
-    const float b = this->getVoxel(max_x, min_y, z);
-    const float c = this->getVoxel(min_x, max_y, z);
-    const float d = this->getVoxel(max_x, max_y, z);
-
-    const float interpolate_ab = Volume::linearInterpolate(a, b, x_factor);
-    const float interpolate_cd = Volume::linearInterpolate(c, d, x_factor);
-
-    const float interpolated_result = Volume::linearInterpolate(interpolate_ab, interpolate_cd, y_factor);
-
-    return interpolated_result;
+    return 0.0f;
 }
 
 
@@ -215,15 +193,18 @@ void Volume::loadFile(const std::filesystem::path& file)
     std::ifstream ifs(file, std::ios::binary);
     assert(ifs.is_open());
 
+
     // Normalize file extension to lowercase
     std::string extension = file.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
     // Check file type
     if (extension == ".fld") {
+        m_dataType = VolumeType::Volume;
         m_fileExtension = FileExtension::FLD;
     }
     else if (extension == ".dat") {
+        m_dataType = VolumeType::Volume;
         m_fileExtension = FileExtension::DAT;
     }
     else {
@@ -231,11 +212,18 @@ void Volume::loadFile(const std::filesystem::path& file)
         return;
     }
 
-    const auto header = readHeader(ifs, m_fileExtension);
+    const auto header = readHeader(ifs, m_dataType, m_fileExtension);
     m_dim = header.dim;
     m_elementSize = header.elementSize;
 
-    loadVolumeData(ifs);
+    switch(m_dataType) {
+    case VolumeType::Volume:
+        loadVolumeData(ifs);
+        break;
+    default:
+        return;
+    }
+    return;
 }
 
 void Volume::loadVolumeData(std::ifstream& ifs)
@@ -258,17 +246,98 @@ void Volume::loadVolumeData(std::ifstream& ifs)
         }
     }
 }
+
+void Volume::loadVectorFieldData()
+{
+    const size_t voxelCount = static_cast<size_t>(m_dim.x * m_dim.y * m_elementSize);
+    const size_t byteCount = voxelCount * sizeof(float);
+
+    auto readDataFromFile = [&](const std::filesystem::path& filePath, size_t offset) {
+        assert(std::filesystem::exists(filePath));
+
+        std::ifstream ifs(filePath, std::ios::binary);
+        assert(ifs.is_open());
+
+        std::vector<char> buffer(byteCount);
+        ifs.read(buffer.data(), std::streamsize(byteCount));
+        if (ifs.gcount() != byteCount) {
+            std::cerr << "Error: File size mismatch!" << std::endl;
+            return false;
+        }
+        ifs.close();
+
+        for (size_t i = 0; i < buffer.size(); i += 4) {
+            float value;
+            std::memcpy(&value, &buffer[i], sizeof(float)); // Convert bytes to float
+            m_data[offset++] = value; // Update m_data with the correct index
+        }
+
+        return true;
+    };
+
+    if (m_dim.z == 1) {
+        m_data.resize(voxelCount);
+
+        std::filesystem::path filePath(m_fileName);
+        filePath.replace_extension(".dat");
+
+        size_t index = 0;
+        // Use the lambda to read the data from the file
+        if (!readDataFromFile(filePath, index)) {
+            return;
+        }
+
+    } else {
+        m_data.resize(voxelCount * m_dim.z);
+
+        std::filesystem::path filePath(m_fileName);
+        std::string fileNameWithoutExt = filePath.stem().string();
+
+        /*#pragma omp parallel for*/
+        for (int i=0;i<m_dim.z;i++) {
+
+            // Create the new filename with number in between
+            std::ostringstream newFileName;
+            newFileName << fileNameWithoutExt << "." << std::setw(5) << std::setfill('0') << i; // name
+
+            // Replace the extension with ".dat"
+            filePath.replace_extension(".dat");
+
+            // Combine the new file name with the ".dat" extension
+            filePath.replace_filename(newFileName.str() + ".dat");
+
+            size_t index = i * voxelCount;
+            if (!readDataFromFile(filePath, index)) {
+                continue;
+            }
+        }
+
+        // The hurricane dataset has flipped x and y components. For simplicity we change these here.
+        if(fileNameWithoutExt == "hurricane_p_tc") {
+            flipXYVectorField();
+        }
+    }
 }
 
-static Header readHeader(std::ifstream& ifs, const volume::FileExtension& fileExtension)
+void Volume::flipXYVectorField()
 {
-    if (fileExtension == volume::FileExtension::FLD) {
-        return readVolumeHeader_fld(ifs);
-    } else if (fileExtension == volume::FileExtension::DAT) {
-        return readVolumeHeader_dat(ifs);
-    } else {
-        return {};
+    const size_t voxelCount = static_cast<size_t>(m_dim.x * m_dim.y * m_dim.z* m_elementSize);
+    for(size_t i = 0; i < voxelCount; i += m_elementSize)
+    {
+        float x = m_data[i];
+        float y = m_data[i+1];
+
+        m_data[i]   = y;
+        m_data[i+1] = x;
     }
+}
+
+}
+
+static Header readHeader(std::ifstream& ifs, const volume::VolumeType& dataType, const volume::FileExtension& fileExtension)
+{
+    if (fileExtension == volume::FileExtension::FLD) return readVolumeHeader_fld(ifs);
+    else return readVolumeHeader_dat(ifs);
 }
 
 Header readVolumeHeader_dat(std::ifstream& ifs)
@@ -279,11 +348,11 @@ Header readVolumeHeader_dat(std::ifstream& ifs)
     const std::size_t nbytes = 2;
     char buff[nbytes];
     ifs.read(buff, nbytes);
-    std::memcpy(&sizeX, buff, sizeof(int));
+    std::memcpy(&sizeX, buff, sizeof(unsigned short));
     ifs.read(buff, nbytes);
-    std::memcpy(&sizeY, buff, sizeof(int));
+    std::memcpy(&sizeY, buff, sizeof(unsigned short));
     ifs.read(buff, nbytes);
-    std::memcpy(&sizeZ, buff, sizeof(int));
+    std::memcpy(&sizeZ, buff, sizeof(unsigned short));
     out.dim.x = sizeX;
     out.dim.y = sizeY;
     out.dim.z = sizeZ;
@@ -342,6 +411,39 @@ Header readVolumeHeader_fld(std::ifstream& ifs)
             std::cerr << "Invalid AVS keyword " << key << " in file" << std::endl;
         }
     }
+    return out;
+}
+
+Header readVectorFieldHeader(std::ifstream& file)
+{
+    // Read the header (40 bytes)
+    std::array<char, 40> header {};
+    file.read(header.data(), header.size());
+
+    if (!file) {
+        std::cerr << "Error reading header from file." << std::endl;
+        return {};
+    }
+
+    // Parse the header using std::stringstream
+    int vol_dim[3] = { 0, 0, 0 };
+    int num_scalar_fields = 0, num_timesteps = 0;
+    float timestep = 0.0f;
+
+    std::stringstream ss(std::string(header.data(), header.size()));
+    std::string magic; // To store "SN4DB"
+    ss >> magic >> vol_dim[0] >> vol_dim[1] >> vol_dim[2]
+        >> num_scalar_fields >> num_timesteps >> timestep;
+
+    if (magic != "SN4DB") {
+        std::cerr << "Invalid file format: " << magic << std::endl;
+        return {};
+    }
+
+    const int num_pos_xyz = 3;
+    Header out { glm::ivec3(vol_dim[0], vol_dim[1], num_timesteps),
+        static_cast<size_t>(num_scalar_fields + num_pos_xyz) };
+
     return out;
 }
 
