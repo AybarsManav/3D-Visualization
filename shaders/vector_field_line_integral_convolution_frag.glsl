@@ -53,7 +53,7 @@ void main()
     vec3 currentPosition = samplePosition;
     for (int i = 0; i < kernelWidth; ++i) {
         vec2 dir = normalize(texture(vfTexture, currentPosition).xy); // Get the direction in the current sample pos
-        currentPosition += vec3(dir * scale, timeStep);
+        currentPosition += vec3(dir * scale, 0);
         acc += texture(noiseTexture, currentPosition.xy).r; // No need to check the bounds because texture is setup with GL_CLAMP_TO_EDGE
         weight += 1;
     }
@@ -62,7 +62,7 @@ void main()
     currentPosition = samplePosition; // Reset current position to center
         for (int i = 0; i < kernelWidth; ++i) {
         vec2 dir = normalize(texture(vfTexture, currentPosition).xy); // Get the direction in the current sample pos
-        currentPosition -= vec3(dir * scale, timeStep);
+        currentPosition -= vec3(dir * scale, 0);
         acc += texture(noiseTexture, currentPosition.xy).r;  // No need to check the bounds because texture is setup with GL_CLAMP_TO_EDGE
         weight += 1;
     }
