@@ -10,7 +10,7 @@ namespace ui {
 
 class TransferFunctionWidget {
 public:
-    TransferFunctionWidget(const volume::Volume& volume);
+    TransferFunctionWidget(const volume::Volume& volume, const bool useSimpleDefault);
 
     void draw();
     void updateRenderConfig(render::RenderConfig& renderConfig) const;

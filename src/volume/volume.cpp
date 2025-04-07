@@ -207,6 +207,9 @@ void Volume::loadFile(const std::filesystem::path& file)
         m_dataType = VolumeType::Volume;
         m_fileExtension = FileExtension::DAT;
     }
+    else if (extension == ".gri") {
+        m_dataType = VolumeType::VectorField;
+    }
     else {
         std::cerr << "Unsupported file extension: " << extension << "\n";
         return;
@@ -219,6 +222,9 @@ void Volume::loadFile(const std::filesystem::path& file)
     switch(m_dataType) {
     case VolumeType::Volume:
         loadVolumeData(ifs);
+        break;
+    case VolumeType::VectorField:
+        loadVectorFieldData();
         break;
     default:
         return;
@@ -336,8 +342,15 @@ void Volume::flipXYVectorField()
 
 static Header readHeader(std::ifstream& ifs, const volume::VolumeType& dataType, const volume::FileExtension& fileExtension)
 {
-    if (fileExtension == volume::FileExtension::FLD) return readVolumeHeader_fld(ifs);
-    else return readVolumeHeader_dat(ifs);
+    switch (dataType) {
+    case volume::VolumeType::Volume:
+        if (fileExtension == volume::FileExtension::FLD) return readVolumeHeader_fld(ifs);
+        else return readVolumeHeader_dat(ifs);
+    case volume::VolumeType::VectorField:
+        return readVectorFieldHeader(ifs);
+    default:
+        return {};
+    }
 }
 
 Header readVolumeHeader_dat(std::ifstream& ifs)

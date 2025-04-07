@@ -22,7 +22,10 @@ GLuint loadShader(std::string_view fileName, GLenum type)
 	GLint shaderCompiled;
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &shaderCompiled);
 	if (!shaderCompiled) {
-		std::cerr << "Error compiling " << (type == GL_VERTEX_SHADER ? "vertex" : "fragment") << " shader" << std::endl;
+		std::string typeString = "vertex";
+		if (type == GL_FRAGMENT_SHADER) { typeString = "fragment"; }
+		if (type == GL_GEOMETRY_SHADER) { typeString = "geometry"; }
+		std::cerr << "Error compiling " << typeString << " shader" << std::endl;
 		int infologLength = 0;
 		int charsWritten = 0;
 

@@ -1,3 +1,4 @@
+
 // imgui has to be included before imgui_impl_glfw.h or imgui_impl_opengl3.h
 #include <imgui.h>
 
@@ -6,6 +7,7 @@
 
 #include "render/renderer.h"
 #include "render/gpu_renderer.h"
+#include "render/vf_renderer.h"
 #include "ui/full_screen_texture_gl.h"
 #include "ui/menu.h"
 #include "ui/surface_cube.h"
@@ -15,6 +17,7 @@
 #include "volume/gradient_volume.h"
 #include "volume/volume.h"
 #include "volume/gpu_volume.h"
+#include "volume/vf_volume.h"
 #include <chrono>
 #include <cmath> // log2
 #include <glm/geometric.hpp>
@@ -54,7 +57,10 @@ int main(int argc, char** argv)
     std::optional<volume::GradientVolume> optGradientVolume;
     std::optional<render::Renderer> optRenderer;
     std::optional<render::GPURenderer> gpuRenderer;
+    std::optional<render::VectorRenderer> vectorRenderer;
     ui::Menu volVisMenu { viewportSize };
+
+    std::optional<volume::VectorFieldVolume> optVCVolume;
 
     // Whether to redraw because the user interacted with the application. When this is the reason for the
     // redraw then dynamic resolution scaling is enabled. After the user interaction, one more render is
@@ -71,15 +77,37 @@ int main(int argc, char** argv)
         optVolume.emplace(filePath.string());
         optVolume->interpolationMode = volVisMenu.interpolationMode();
 
-        optGradientVolume.emplace(optVolume.value());
-        optGPUVolume.emplace(&optVolume.value());
-        optGPUVolume->interpolationMode = volVisMenu.interpolationMode();
-        optRenderer.emplace(&optVolume.value(), &optGradientVolume.value(), &trackballCamera, volVisMenu.renderConfig());
-        gpuRenderer.emplace(&optGPUVolume.value(), &optVolume.value(), &optGradientVolume.value(), &trackballCamera, volVisMenu.renderConfig(), volVisMenu.meshConfig());
-        gpuRenderer->setRenderSize(baseRenderResolutionScaled);
+        volume::VolumeType dataType = optVolume->getVolumeType();
+        if (dataType == volume::VolumeType::VectorField) {
+            optVCVolume.emplace(optVolume.value());
 
-        volVisMenu.setLoadedVolume(optVolume.value(), optGradientVolume.value());
-        trackballCamera.enableRotation(true);
+            volVisMenu.setLoadedVolume(optVolume.value());
+
+            vectorRenderer.emplace(&optVolume.value(), &optVCVolume.value(), &trackballCamera, volVisMenu.renderConfig());
+            vectorRenderer->setRenderSize(baseRenderResolution);
+
+            glm::vec3 dims = optVolume->dims();
+            dims.z =0;
+            const float maxDimension = float(glm::compMax(dims));
+            trackballCamera.setDistance(maxDimension);
+            trackballCamera.setWorldScale(maxDimension);
+            trackballCamera.setLookAt(glm::vec3(dims) / 2.0f);
+
+            redrawUserInteraction = true;
+
+            trackballCamera.enableRotation(false);
+
+        } else {
+            optGradientVolume.emplace(optVolume.value());
+            optGPUVolume.emplace(&optVolume.value());
+            optGPUVolume->interpolationMode = volVisMenu.interpolationMode();
+            optRenderer.emplace(&optVolume.value(), &optGradientVolume.value(), &trackballCamera, volVisMenu.renderConfig());
+            gpuRenderer.emplace(&optGPUVolume.value(), &optVolume.value(), &optGradientVolume.value(), &trackballCamera, volVisMenu.renderConfig(), volVisMenu.meshConfig());
+            gpuRenderer->setRenderSize(baseRenderResolutionScaled);
+
+            volVisMenu.setLoadedVolume(optVolume.value(), optGradientVolume.value());
+            trackballCamera.enableRotation(true);
+        }
 
         const float maxDimension = float(glm::compMax(optVolume->dims()));
         trackballCamera.setDistance(maxDimension);
@@ -97,6 +125,8 @@ int main(int argc, char** argv)
                 optRenderer->setConfig(renderConfig);
             if (gpuRenderer)
                 gpuRenderer->setRenderConfig(renderConfig);
+            if (vectorRenderer)
+                vectorRenderer->setConfig(renderConfig);
             redrawUserInteraction = true;
             updateVolume = true;
             if (renderConfig.updateTF) {
@@ -134,6 +164,8 @@ int main(int argc, char** argv)
             volVisMenu.setBaseRenderResolution(baseRenderResolution);
             if (gpuRenderer)
                 gpuRenderer->setRenderSize(baseRenderResolution);
+            if (vectorRenderer)
+                vectorRenderer->setRenderSize(baseRenderResolution);
 
             windowSize = newWindowSize;
             redrawUserInteraction = true;
@@ -165,7 +197,7 @@ int main(int argc, char** argv)
                     rectMin, rectMax,
                     rectNormal, intersectionPoint);
 
-                vector_rect.x = 1.0f - intersectionPoint.x / dims.x;
+                vector_rect.x = intersectionPoint.x / dims.x;
                 vector_rect.y = intersectionPoint.y / dims.y;
 
                 vector_rect.z = vector_rect.x;
@@ -202,7 +234,7 @@ int main(int argc, char** argv)
                     rectMin, rectMax,
                     rectNormal, intersectionPoint);
 
-                vector_rect.x = 1.0f - intersectionPoint.x / dims.x;
+                vector_rect.x = intersectionPoint.x / dims.x;
                 vector_rect.y = intersectionPoint.y / dims.y;
 
                 glm::vec2 endPos(mousePos.z, mousePos.w);
@@ -217,7 +249,7 @@ int main(int argc, char** argv)
                     rectMin, rectMax,
                     rectNormal, intersectionPoint);
 
-                vector_rect.z = 1.0f - intersectionPoint.x / dims.x;
+                vector_rect.z = intersectionPoint.x / dims.x;
                 vector_rect.w = intersectionPoint.y / dims.y;
 
                 volVisMenu.setMouseRect(vector_rect);
@@ -244,157 +276,179 @@ int main(int argc, char** argv)
         using clock = std::chrono::steady_clock;
         startFrame = clock::now();
 
-        if (volVisMenu.getCPURendererInUse()) { // CPU rendering loop
+        if (optVolume.has_value() && optVolume->getVolumeType() == volume::VolumeType::VectorField) {
+            const glm::ivec2 borders = ((windowSize - glm::ivec2(menuWidth, 0) - baseRenderResolution)) / 2;
+            glViewport(borders.x, borders.y, GLsizei(baseRenderResolution.x * dpiScaling.x), GLsizei(baseRenderResolution.y * dpiScaling.y));
 
-            if (optRenderer.has_value()) {
-                // If camera changed in any way then we need to redraw.
-                static glm::mat4 prevViewMatrix = glm::identity<glm::mat4>();
-                const glm::mat4 viewMatrix = trackballCamera.viewMatrix();
-                if (prevViewMatrix != viewMatrix) {
-                    prevViewMatrix = viewMatrix;
-                    redrawUserInteraction = true;
-                }
-                // If previous frame we rendered at a lower resolution (because something changed) then it will request to draw
-                // the next frame in full resolution. If the user is still holding the mouse button then we can reasonably assume
-                // that (s)he is not finished with the interaction (so we should keep rendering at a lower resolution).
-                if (redrawFullResolution && (myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)))
-                    redrawUserInteraction = true;
+            // Enable depth testing and clear the color/depth buffers.
+            glDisable(GL_DEPTH_TEST);
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
 
-                // We draw when either the user has interacted (camera matrix changed or render config changed (see callback)) or if
-                //  last frame we rendered at a lower resolution and we want to now render at the full resolution.
-                if (redrawUserInteraction || redrawFullResolution) {
-                    if (redrawUserInteraction) {
-                        // Reduce the resolution if the performance drops below the target frame time.
-                        // Estimated performance when rendering at full resolution (resolution returned from menu).
-                        // This way we can dynamically update the resolution while the user is moving the camera since
-                        // some views may be slower to render than others.
-                        const float estimatedFullResFrameTime = float(renderTime.count()) * float(prevResolutionScale * prevResolutionScale);
-                        const float performanceScale = estimatedFullResFrameTime / float(frameTimeTarget);
-                        // Resolution scale changes the number of pixels quadratically (scales both width and height).
-                        const int resolutionScale = std::max(int(std::sqrt(performanceScale)) + 1, 1);
+            std::optional<GLint> tfTexId = volVisMenu.renderConfig().tfTexId;
 
-                        // NOTE(Mathijs): calling setBaseRenderResolution will update the render config and call
-                        //  the associated callback. Make sure that you don't read redrawUserInteraction after
-                        //  this call because it will always be true.
-                        volVisMenu.setBaseRenderResolution(baseRenderResolution / resolutionScale);
-                        redrawFullResolution = true;
-                        prevResolutionScale = resolutionScale;
-                    } else {
-                        prevResolutionScale = 1;
-                        volVisMenu.setBaseRenderResolution(baseRenderResolution);
-                        redrawFullResolution = false;
+            using clock = std::chrono::steady_clock;
+            const auto start = clock::now();
+
+            if (tfTexId.has_value()) {
+                vectorRenderer->render(tfTexId.value());
+            }
+
+            const auto end = clock::now();
+            renderTime = end - start;
+        } else {
+            if (volVisMenu.getCPURendererInUse()) { // CPU rendering loop
+
+                if (optRenderer.has_value()) {
+                    // If camera changed in any way then we need to redraw.
+                    static glm::mat4 prevViewMatrix = glm::identity<glm::mat4>();
+                    const glm::mat4 viewMatrix = trackballCamera.viewMatrix();
+                    if (prevViewMatrix != viewMatrix) {
+                        prevViewMatrix = viewMatrix;
+                        redrawUserInteraction = true;
                     }
-                    redrawUserInteraction = false;
+                    // If previous frame we rendered at a lower resolution (because something changed) then it will request to draw
+                    // the next frame in full resolution. If the user is still holding the mouse button then we can reasonably assume
+                    // that (s)he is not finished with the interaction (so we should keep rendering at a lower resolution).
+                    if (redrawFullResolution && (myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)))
+                        redrawUserInteraction = true;
+
+                    // We draw when either the user has interacted (camera matrix changed or render config changed (see callback)) or if
+                    //  last frame we rendered at a lower resolution and we want to now render at the full resolution.
+                    if (redrawUserInteraction || redrawFullResolution) {
+                        if (redrawUserInteraction) {
+                            // Reduce the resolution if the performance drops below the target frame time.
+                            // Estimated performance when rendering at full resolution (resolution returned from menu).
+                            // This way we can dynamically update the resolution while the user is moving the camera since
+                            // some views may be slower to render than others.
+                            const float estimatedFullResFrameTime = float(renderTime.count()) * float(prevResolutionScale * prevResolutionScale);
+                            const float performanceScale = estimatedFullResFrameTime / float(frameTimeTarget);
+                            // Resolution scale changes the number of pixels quadratically (scales both width and height).
+                            const int resolutionScale = std::max(int(std::sqrt(performanceScale)) + 1, 1);
+
+                            // NOTE(Mathijs): calling setBaseRenderResolution will update the render config and call
+                            //  the associated callback. Make sure that you don't read redrawUserInteraction after
+                            //  this call because it will always be true.
+                            volVisMenu.setBaseRenderResolution(baseRenderResolution / resolutionScale);
+                            redrawFullResolution = true;
+                            prevResolutionScale = resolutionScale;
+                        } else {
+                            prevResolutionScale = 1;
+                            volVisMenu.setBaseRenderResolution(baseRenderResolution);
+                            redrawFullResolution = false;
+                        }
+                        redrawUserInteraction = false;
+
+                        using clock = std::chrono::steady_clock;
+                        const auto start = clock::now();
+                        optRenderer->render();
+                        const auto end = clock::now();
+                        renderTime = end - start;
+
+                        fullScreenTextureGL.update(optRenderer->frameBuffer(), volVisMenu.renderConfig().renderResolution);
+                    }
+
+                    // === Drawing the framebuffer to the screen and adding the wireframe. ===
+
+                    // Make the wireframe slightly larger than the volume to prevent z-fighting
+                    constexpr float wireframeMargin = 0.05f;
+                    const auto wireframeCubeSize = glm::vec3(optVolume->dims()) * (1.0f + wireframeMargin);
+                    const auto wireframeCubeOffset = -glm::vec3(optVolume->dims()) * wireframeMargin * 0.5f;
+                    constexpr glm::vec3 wireframeColor { 1.0f };
+
+                    // Draw on the left side of the screen next to the menu.
+                    const glm::ivec2 borders = ((windowSize - glm::ivec2(menuWidth, 0) - baseRenderResolution)) / 2;
+                    glViewport(borders.x, borders.y, GLsizei(baseRenderResolution.x * dpiScaling.x), GLsizei(baseRenderResolution.y * dpiScaling.y));
+
+                    // Enable depth testing and clear the color/depth buffers.
+                    glEnable(GL_DEPTH_TEST);
+                    glClearDepthf(1.0f);
+                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                    // Enable normal depth testing and draw an invisible (no color write) solid cube to the depth buffer.
+                    glDepthMask(GL_TRUE);
+                    glDepthFunc(GL_LEQUAL);
+                    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+                    surfaceCube.draw(trackballCamera, optVolume->dims());
+
+                    // Enable color writes and depth blending.
+                    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                    glEnable(GL_BLEND);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+                    // Draw the part of the wireframe that is behind the volume.
+                    glDepthMask(GL_FALSE);
+                    glDepthFunc(GL_GREATER);
+                    wireframeCube.draw(trackballCamera, wireframeCubeSize, wireframeCubeOffset, wireframeColor);
+
+                    // Draw the CPU framebuffer on top of the GPU framebuffer.
+                    glDepthFunc(GL_ALWAYS);
+                    //  Assume that the renderer already multiplied the RGB channels by alpha.
+                    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                    fullScreenTextureGL.draw();
+
+                    // Finally, draw the part of the wireframe that is in front of the volume.
+                    glDepthFunc(GL_LEQUAL);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                    wireframeCube.draw(trackballCamera, wireframeCubeSize, wireframeCubeOffset, wireframeColor);
+
+                    // Restore render state.
+                    glDisable(GL_BLEND);
+                    glDepthMask(GL_TRUE);
+                    glDepthFunc(GL_LEQUAL);
+
+                    // wireframeCube.draw(trackballCamera, wireframeCubeSize, wireframeCubeOffset, wireframeColor);
+                } else {
+                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                    glClear(GL_COLOR_BUFFER_BIT);
+                }
+            } else { // GPU rendering loop
+                if (gpuRenderer.has_value()) {
+                    // Draw on the left side of the screen next to the menu.
+                    const glm::ivec2 borders = ((windowSize - glm::ivec2(menuWidth, 0) - baseRenderResolution)) / 2;
+                    glViewport(borders.x, borders.y, GLsizei(baseRenderResolution.x * dpiScaling.x), GLsizei(baseRenderResolution.y * dpiScaling.y));
+                    // Enable depth testing and clear the color/depth buffers.
+                    glEnable(GL_DEPTH_TEST);
+                    glClearDepthf(1.0f);
+                    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                    glDepthFunc(GL_LEQUAL);
 
                     using clock = std::chrono::steady_clock;
                     const auto start = clock::now();
-                    optRenderer->render();
+                    if (redrawGPUMesh && !(myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))) {
+                        gpuRenderer->updateGPUMesh(true);
+                        redrawGPUMesh = false;
+                    }
+                    if (redrawGPUVolume && !(myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))) {
+                        gpuRenderer->setVolumeBricksSize();
+                        redrawGPUVolume = false;
+                    }
+                    if (redrawUserInteraction) {
+                        optGPUVolume->updateInterpolation();
+                        redrawUserInteraction = false;
+                    }
+                    if (updateVolume && !(myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))) {
+                        gpuRenderer->updateVolumeBricks();
+                        updateVolume = false;
+                    }
+
+                    if (updateOpacitySumTable) {
+                        gpuRenderer->updateGPUMesh(false);
+                        updateOpacitySumTable = false;
+                    }
+                    gpuRenderer->render();
+
                     const auto end = clock::now();
                     renderTime = end - start;
 
-                    fullScreenTextureGL.update(optRenderer->frameBuffer(), volVisMenu.renderConfig().renderResolution);
+                    // Restore render state.
+                    glDisable(GL_BLEND);
+                    glDepthMask(GL_TRUE);
+                    glDepthFunc(GL_LEQUAL);
                 }
-
-                // === Drawing the framebuffer to the screen and adding the wireframe. ===
-
-                // Make the wireframe slightly larger than the volume to prevent z-fighting
-                constexpr float wireframeMargin = 0.05f;
-                const auto wireframeCubeSize = glm::vec3(optVolume->dims()) * (1.0f + wireframeMargin);
-                const auto wireframeCubeOffset = -glm::vec3(optVolume->dims()) * wireframeMargin * 0.5f;
-                constexpr glm::vec3 wireframeColor { 1.0f };
-
-                // Draw on the left side of the screen next to the menu.
-                const glm::ivec2 borders = ((windowSize - glm::ivec2(menuWidth, 0) - baseRenderResolution)) / 2;
-                glViewport(borders.x, borders.y, GLsizei(baseRenderResolution.x * dpiScaling.x), GLsizei(baseRenderResolution.y * dpiScaling.y));
-
-                // Enable depth testing and clear the color/depth buffers.
-                glEnable(GL_DEPTH_TEST);
-                glClearDepthf(1.0f);
-                glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-                // Enable normal depth testing and draw an invisible (no color write) solid cube to the depth buffer.
-                glDepthMask(GL_TRUE);
-                glDepthFunc(GL_LEQUAL);
-                glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-                surfaceCube.draw(trackballCamera, optVolume->dims());
-
-                // Enable color writes and depth blending.
-                glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-                // Draw the part of the wireframe that is behind the volume.
-                glDepthMask(GL_FALSE);
-                glDepthFunc(GL_GREATER);
-                wireframeCube.draw(trackballCamera, wireframeCubeSize, wireframeCubeOffset, wireframeColor);
-
-                // Draw the CPU framebuffer on top of the GPU framebuffer.
-                glDepthFunc(GL_ALWAYS);
-                //  Assume that the renderer already multiplied the RGB channels by alpha.
-                glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                fullScreenTextureGL.draw();
-
-                // Finally, draw the part of the wireframe that is in front of the volume.
-                glDepthFunc(GL_LEQUAL);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                wireframeCube.draw(trackballCamera, wireframeCubeSize, wireframeCubeOffset, wireframeColor);
-
-                // Restore render state.
-                glDisable(GL_BLEND);
-                glDepthMask(GL_TRUE);
-                glDepthFunc(GL_LEQUAL);
-
-                // wireframeCube.draw(trackballCamera, wireframeCubeSize, wireframeCubeOffset, wireframeColor);
-            } else {
-                glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                glClear(GL_COLOR_BUFFER_BIT);
-            }
-        } else { // GPU rendering loop
-            if (gpuRenderer.has_value()) {
-                // Draw on the left side of the screen next to the menu.
-                const glm::ivec2 borders = ((windowSize - glm::ivec2(menuWidth, 0) - baseRenderResolution)) / 2;
-                glViewport(borders.x, borders.y, GLsizei(baseRenderResolution.x * dpiScaling.x), GLsizei(baseRenderResolution.y * dpiScaling.y));
-                // Enable depth testing and clear the color/depth buffers.
-                glEnable(GL_DEPTH_TEST);
-                glClearDepthf(1.0f);
-                glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-                glDepthFunc(GL_LEQUAL);
-
-                using clock = std::chrono::steady_clock;
-                const auto start = clock::now();
-                if (redrawGPUMesh && !(myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))) {
-                    gpuRenderer->updateGPUMesh(true);
-                    redrawGPUMesh = false;
-                }
-                if (redrawGPUVolume && !(myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))) {
-                    gpuRenderer->setVolumeBricksSize();
-                    redrawGPUVolume = false;
-                }
-                if (redrawUserInteraction) {
-                    optGPUVolume->updateInterpolation();
-                    redrawUserInteraction = false;
-                }
-                if (updateVolume && !(myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT) || myWindow.isMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))) {
-                    gpuRenderer->updateVolumeBricks();
-                    updateVolume = false;
-                }
-
-                if (updateOpacitySumTable) {
-                    gpuRenderer->updateGPUMesh(false);
-                    updateOpacitySumTable = false;
-                }
-                gpuRenderer->render();
-
-                const auto end = clock::now();
-                renderTime = end - start;
-
-                // Restore render state.
-                glDisable(GL_BLEND);
-                glDepthMask(GL_TRUE);
-                glDepthFunc(GL_LEQUAL);
             }
         }
 

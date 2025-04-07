@@ -63,6 +63,12 @@ configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_screen_filling_quad_fra
 configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_rendermode_mip_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_rendermode_mip_frag.glsl" COPYONLY)
 configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_rendermode_isosurface_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_rendermode_isosurface_frag.glsl" COPYONLY)
 configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/volvis_rendermode_compositing_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/volvis_rendermode_compositing_frag.glsl" COPYONLY)
+# vector field
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/vector_field_scalar_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/vector_field_scalar_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/vector_field_simple_geometry_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/vector_field_simple_geometry_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/vector_field_line_integral_convolution_frag.glsl" "${CMAKE_CURRENT_BINARY_DIR}/vector_field_line_integral_convolution_frag.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/vector_field_vert.glsl" "${CMAKE_CURRENT_BINARY_DIR}/vector_field_vert.glsl" COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/shaders/vector_field_line_geom.glsl" "${CMAKE_CURRENT_BINARY_DIR}/vector_field_line_geom.glsl" COPYONLY)
 
 enable_testing()
 add_subdirectory("integrity_tests")

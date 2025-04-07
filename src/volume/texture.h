@@ -13,7 +13,7 @@ namespace volume {
 
 class Texture {
 public:
-    // Copy constructor needed for the textureManager
+    // Copy constructor
     Texture(const Texture& other);
     Texture(const std::vector<float>& floatTexture, glm::ivec3 dims);
     Texture(const std::vector<glm::vec3>& vec3Texture, glm::ivec3 dims);

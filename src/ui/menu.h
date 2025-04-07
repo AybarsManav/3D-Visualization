@@ -56,6 +56,7 @@ private:
     void showRayCastTab(std::chrono::duration<double> renderTime, std::chrono::duration<double> renderTimeFrame);
     void showGPURayCastTab(std::chrono::duration<double> renderTime, std::chrono::duration<double> renderTimeFrame);
     void showTransFuncTab();
+    void showVectorFieldTab();
 
     void callRenderConfigChangedCallback() const;
     void callGPUMeshConfigChangedCallback() const;

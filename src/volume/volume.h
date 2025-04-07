@@ -14,7 +14,8 @@ enum class InterpolationMode {
 };
 
 enum class VolumeType {
-    Volume = 0
+    Volume = 0,
+    VectorField = 1
 }; 
 
 enum class FileExtension {

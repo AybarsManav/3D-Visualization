@@ -152,15 +152,18 @@ glm::ivec3 GPUVolume::findOptimalDimensions(int N)
     using clock = std::chrono::steady_clock;
     std::chrono::steady_clock::time_point start = clock::now();
 
-    // TODO: calculate the optimal dimensions for the cache volume here
+    // initialize as a cube with one item
     glm::ivec3 optimalDimensions = glm::vec3(1, 1, 1);
 
     // stop the timer
     using clock = std::chrono::steady_clock;
     std::chrono::steady_clock::time_point stop = clock::now();
+    
+    int value;
+    glGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &value);
 
     std::cout << "findOptimalDimensions() with cube executed in " << std::chrono::duration<double, std::milli>(stop - start).count() << "ms" << std::endl;
-    std::cout << "fitting cube uses " << (float)N/(optimalDimensions.x*optimalDimensions.y*optimalDimensions.z)*100.0f << "\% of available space" << std::endl;
+    std::cout << "max tex size " << value << std::endl;
 
     // return the optimal dimensions
     return optimalDimensions;

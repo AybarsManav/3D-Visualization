@@ -22,7 +22,7 @@ static constexpr size_t sentinel = static_cast<size_t>(-1);
 
 namespace ui {
 
-TransferFunctionWidget::TransferFunctionWidget(const volume::Volume& volume)
+TransferFunctionWidget::TransferFunctionWidget(const volume::Volume& volume, const bool useSimpleDefault)
     : m_colorMap(256)
     , m_minValue(volume.minimum())
     , m_maxValue(volume.maximum())
@@ -32,16 +32,24 @@ TransferFunctionWidget::TransferFunctionWidget(const volume::Volume& volume)
     , m_colorMapImg(createTexture())
     , m_colorMapImgOpague(createTexture())
 {
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.0f), glm::vec4(0.0f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.06f, 0.0f), glm::vec4(0.0f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.15f, 0.15f), glm::vec4(0.25f, 0.75f, 1.0f, 0.15f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.2f, 0.0f), glm::vec4(0.1f, 0.3f, 0.5f, 0.0f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.3f, 0.0f), glm::vec4(0.8f, 0.8f, 0.2f, 0.0f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.4f, 0.4f), glm::vec4(1.0f, 1.0f, 0.25f, 0.4f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.5f, 0.0f), glm::vec4(0.8f, 0.8f, 0.2f, 0.0f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.7f, 0.0f), glm::vec4(0.7f, 0.7f, 0.7f, 0.0f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(0.8f, 1.0f), glm::vec4(0.8f, 0.8f, 0.8f, 1.0f) });
-    m_tfPoints.push_back(TFPoint { glm::vec2(1.0f), glm::vec4(1.0f) });
+    if (useSimpleDefault) { // badly sampled 5 step viridis
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.0f,  0.5f),  glm::vec4(0.267f, 0.004f, 0.329f, 0.5f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.25f, 0.5f),  glm::vec4(0.282f, 0.157f, 0.471f, 0.5f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.5f,  0.5f),  glm::vec4(0.125f, 0.565f, 0.549f, 0.5f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.75f, 0.5f),  glm::vec4(0.369f, 0.788f, 0.384f, 0.5f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(1.0f,  0.5f),  glm::vec4(0.992f, 0.906f, 0.145f, 0.5f) });
+    } else {
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.0f),         glm::vec4(0.0f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.06f, 0.0f),  glm::vec4(0.0f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.15f, 0.15f), glm::vec4(0.25f, 0.75f, 1.0f, 0.15f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.2f,  0.0f),  glm::vec4(0.1f, 0.3f, 0.5f, 0.0f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.3f,  0.0f),  glm::vec4(0.8f, 0.8f, 0.2f, 0.0f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.4f,  0.4f),  glm::vec4(1.0f, 1.0f, 0.25f, 0.4f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.5f,  0.0f),  glm::vec4(0.8f, 0.8f, 0.2f, 0.0f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.7f,  0.0f),  glm::vec4(0.7f, 0.7f, 0.7f, 0.0f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(0.8f,  1.0f),  glm::vec4(0.8f, 0.8f, 0.8f, 1.0f) });
+        m_tfPoints.push_back(TFPoint { glm::vec2(1.0f),         glm::vec4(1.0f) });
+    }
 
     const auto histogram = volume.histogram();
 
