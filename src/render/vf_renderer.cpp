@@ -436,21 +436,44 @@ void VectorRenderer::integrateLine(const glm::vec2 seed, const float startTimeSt
     line.reserve(m_renderConfig.maxSteps * 2);
 
     glm::vec2 pos = seed;
+    float time = startTimeStep;
 
     // push back the seed position, note: we want normalized positions in the vertex buffer
     glm::ivec3 dims = m_pVectorVolume->getDims();
     line.push_back(pos.x / dims.x);
     line.push_back(pos.y / dims.y);
 
+    for (int i = 0; i < m_renderConfig.maxSteps; ++i) {
+        auto dir = m_pVectorVolume->getVectorDirectionInterpolated(glm::vec3(pos, time)); // Get the vector direction
 
-    // you need to advance the position according to the vector field
-    // replace this code by your loop over the integration steps.
-    pos.x += 50;
-    pos.y += 50;
+        // Break if direction vector is too small (sink)
+        if (glm::length(dir) < m_renderConfig.stoppingMagnitude)
+            break;
 
-    // push back the new position
-    line.push_back(pos.x / dims.x);
-    line.push_back(pos.y / dims.y);
+        glm::vec2 newPos;
+        auto eulerStep = stepSize * dir; // Euler move
+    
+        // Choose method - Euler
+        if (m_renderConfig.method == LineMethod::VF_Euler) {
+            newPos = pos + eulerStep;
+        } else { // RK-2
+            auto halfPos = pos + eulerStep / 2.f;
+            auto halfDir = m_pVectorVolume->getVectorDirectionInterpolated(glm::vec3(halfPos, time));
+            newPos = pos + stepSize * halfDir;
+        }
+
+        // Update position and time
+        pos = newPos;
+        time += stepSizeTime;
+
+        // If we reached out of bound then break
+        if (outOfBound(glm::vec3(pos, time)))
+            break;
+
+        // Push the normalized new position
+        line.push_back(pos.x / dims.x);
+        line.push_back(pos.y / dims.y);
+    }
 }
 
 // ======= TODO: IMPLEMENT ========
