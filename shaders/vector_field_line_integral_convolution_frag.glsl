@@ -31,7 +31,7 @@ void main()
 
     // We can sample the noise texture at the current position like this
     // The noise texture is a 2D texture, so we sample it with the xy coordinates
-    float greyValue = texture (noiseTexture, samplePosition.xy).s;
+    // float greyValue = texture (noiseTexture, samplePosition.xy).s; // Not used
 
     // TODO: implement the smoothing according to the vector field
     // Use the kernelWidth as the number of steps to take in each direction (i.e., the actual width of your kernel should be 2*kernelWidth+1)
@@ -42,6 +42,32 @@ void main()
     // Note that you need to scale the sampled vector by the scale factor before advancing the position
     // Remember that the kernel is centered around the current position, so you need to advance in both directions from the current position
 
+    float acc = 0.0f;
+    float weight = 0.0f;
+
+    // Center
+    acc += texture(noiseTexture, samplePosition.xy).r;
+    weight += 1;
+
+    // Forward direction
+    vec3 currentPosition = samplePosition;
+    for (int i = 0; i < kernelWidth; ++i) {
+        vec2 dir = normalize(texture(vfTexture, currentPosition).xy); // Get the direction in the current sample pos
+        currentPosition += vec3(dir * scale, timeStep);
+        acc += texture(noiseTexture, currentPosition.xy).r; // No need to check the bounds because texture is setup with GL_CLAMP_TO_EDGE
+        weight += 1;
+    }
+
+    // Backward direction
+    currentPosition = samplePosition; // Reset current position to center
+        for (int i = 0; i < kernelWidth; ++i) {
+        vec2 dir = normalize(texture(vfTexture, currentPosition).xy); // Get the direction in the current sample pos
+        currentPosition -= vec3(dir * scale, timeStep);
+        acc += texture(noiseTexture, currentPosition.xy).r;  // No need to check the bounds because texture is setup with GL_CLAMP_TO_EDGE
+        weight += 1;
+    }
+
+    acc = acc / weight;
     // When done we assign the grey value to the output color
-    FragColor = vec4(greyValue,greyValue,greyValue,1);
+    FragColor = vec4(acc, acc, acc, 1);
 }
