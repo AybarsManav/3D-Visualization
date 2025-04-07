@@ -477,6 +477,8 @@ void VectorRenderer::appendArrow(const glm::vec2& position, const glm::vec2& dir
 {
     // The base length to scale the arrow with from the GUI
     float length = m_renderConfig.hedgehogBaseLength;
+    if (!m_renderConfig.hedgehogFixedSize)
+        length *= glm::length(direction);
 
     // The dimensions of the vector field in pixels (x,y) for the 2D spatial part
     glm::ivec3 dims = m_pVectorVolume->getDims();
@@ -487,29 +489,53 @@ void VectorRenderer::appendArrow(const glm::vec2& position, const glm::vec2& dir
     // we get the offset into the vertex buffer before adding to at corresponding indices to the index buffer, divide by 2 as there are two values per vertex (x,y)
     int index_base = m_arrow_vertices.size() / 2;
 
-    // Create four vertices of a quad sized 1x4 centered on position
-    m_arrow_vertices.push_back((position.x - 0.5)/dims.x);
-    m_arrow_vertices.push_back((position.y - 0.5 * length)/dims.y);
-    
-    m_arrow_vertices.push_back((position.x + 0.5)/dims.x);
-    m_arrow_vertices.push_back((position.y - 0.5 * length)/dims.y);
-    
-    m_arrow_vertices.push_back((position.x - 0.5)/dims.x);
-    m_arrow_vertices.push_back((position.y + 0.5 * length)/dims.y);
-    
-    m_arrow_vertices.push_back((position.x + 0.5)/dims.x);
-    m_arrow_vertices.push_back((position.y + 0.5 * length)/dims.y);
+    // Normalize direction
+    glm::vec2 dir = glm::normalize(direction);
+    float angle = std::atan2(dir.x, dir.y); // Since shaft is aligned with y axis, we want the angle in between - in radians
 
-    // We use indexed rendering so that we can reused the shared vertices of the quad defined above for two triangles
-    // first triangle of quad
+    // Scale the arrow length
+    dir *= length;
+
+    // Define local arrow geometry (relative to origin)
+    // Shape: length / 4 from top and bottom and arrow head is length * 0.2 long
+    std::vector<glm::vec2> localVerts = {
+        { -0.5f, -0.25f },
+        { 0.5f, -0.25f },
+        { -0.5f, 0.25f },
+        { 0.5f, 0.25f },
+        { -1.0f, 0.25f },
+        { 1.0f, 0.25f },
+        { 0.0f, 0.45f },
+    };
+
+    // Scale to length
+    for (auto& v : localVerts) {
+        v.y *= length;
+    }
+
+    // Rotate and translate
+    glm::mat2 rot = glm::mat2(std::cos(angle), -std::sin(angle),
+        std::sin(angle), std::cos(angle));
+
+    for (const auto& v : localVerts) {
+        glm::vec2 worldPos = position + rot * v;
+        m_arrow_vertices.push_back(worldPos.x / dims.x);
+        m_arrow_vertices.push_back(worldPos.y / dims.y);
+    }
+
+    // Shaft: 2 triangles
     m_arrow_indices.push_back(index_base + 0);
     m_arrow_indices.push_back(index_base + 1);
     m_arrow_indices.push_back(index_base + 2);
 
-    // second triangle of quad
     m_arrow_indices.push_back(index_base + 1);
     m_arrow_indices.push_back(index_base + 3);
     m_arrow_indices.push_back(index_base + 2);
+
+    // Head: 1 triangle
+    m_arrow_indices.push_back(index_base + 4);
+    m_arrow_indices.push_back(index_base + 5);
+    m_arrow_indices.push_back(index_base + 6);
 }
 
 // ======= TODO: IMPLEMENT ========
@@ -546,7 +572,16 @@ void VectorRenderer::updateHedgehogs()
         // TODO:
         // Set up loop(s) to go over the vector field and sample the vectors according to the hedgehogSampling parameter
         // Use the appendArrow function to create the geometry for the hedgehogs
-        appendArrow(glm::vec2(dims.x/2, dims.y/2), glm::vec2(0.5,0.5));
+        for (int y = 0; y < dims.y; y += samplingDistance) {
+            for (int x = 0; x < dims.x; x += samplingDistance) {
+                glm::vec2 pos(x, y);
+                glm::vec2 dir = m_pVectorVolume->getVectorDirectionInterpolated(glm::vec3(x, y, curTime));
+                if (glm::length(dir) > 0.0001f) { // Skip near-zero vectors
+                    appendArrow(pos, dir);
+                }
+            }
+        }
+
         // Bind the buffer array
         glBindVertexArray(m_vao_triangles);
 
